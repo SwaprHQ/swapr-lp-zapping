@@ -10,21 +10,20 @@ import "@swapr/core/contracts/interfaces/IWETH.sol";
 import "@swapr/periphery/contracts/interfaces/IDXswapRouter.sol";
 import "@swapr/periphery/contracts/libraries/TransferHelper.sol";
 
-
 /// @title Zap
-/// @notice Allows to zapIn from an ERC20 or wrapped native currency to swapr pair and
-/// zapOut from a swapr pair to an ERC20 or wrapped native currency
+/// @notice Allows to zapIn from an ERC20 or native currency to ERC20 pair
+/// and zapOut from an ERC20 pair to an ERC20 or native currency
 /// @dev Dusts from zap can be withdrawn by owner
 contract Zap is Ownable, ReentrancyGuard {
-    /* ========== VARIABLES ========== */
 
+    uint16 public protocolFee = 50; // default 0.5% of zap amount protocol fee
     address public immutable nativeCurrencyWrapper;
+    address public feeTo;
+    address public feeToSetter;
     IDXswapFactory public immutable factory;
     IDXswapRouter public immutable router;
 
-    /* ========== EVENTS ========== */
-
-    event ZapInToken(
+    event ZapInFromToken(
         address indexed sender,
         address indexed tokenFrom,
         uint256 amountFrom,
@@ -32,14 +31,14 @@ contract Zap is Ownable, ReentrancyGuard {
         uint256 amountTo
     );
 
-    event ZapInNativeCurrencyWrapper(
+    event ZapInFromNativeCurrency(
         address indexed sender,
         uint256 amountNativeCurrencyWrapper,
         address indexed pairTo,
         uint256 amountTo
     );
 
-    event ZapOutToken(
+    event ZapOutToToken(
         address indexed sender,
         address indexed pairFrom,
         uint256 amountFrom,
@@ -47,26 +46,25 @@ contract Zap is Ownable, ReentrancyGuard {
         uint256 amountTo
     );
 
-    event ZapOutNativeCurrencyWrapper(
+    event ZapOutToNativeCurrency(
         address indexed sender,
         address indexed pairFrom,
         uint256 amountFrom,
         uint256 amountNativeCurrencyWrapper
     );
 
-    /* ========== INITIALIZER ========== */
-
     /// @notice Constructor
+    /// @param _factory The address of factory
     /// @param _router The address of router
-    constructor(address _router) {
+    /// @param _nativeCurrencyWrapper The address of wrapped native currency
+    constructor(address _factory, address _router, address _nativeCurrencyWrapper, address _feeToSetter) {
         require(_router != address(0), "Zap: router can't be address 0");
 
+        factory = IDXswapFactory(_factory);
         router = IDXswapRouter(_router);
-        factory = IDXswapFactory(IDXswapRouter(_router).factory());
-        nativeCurrencyWrapper = IDXswapRouter(_router).WETH();
+        nativeCurrencyWrapper = _nativeCurrencyWrapper;
+        feeToSetter = _feeToSetter;
     }
-
-    /* ========== EXTERNAL FUNCTIONS ========== */
 
     /// @notice TokenFrom is the first value of `pathToPairToken(0/1)` array.
     /// Swaps half of it to token0 and the other half token1 and add liquidity
@@ -77,18 +75,23 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @param amount1Min The min amount to receive of token1
     /// @param pathToPairToken0 The path to the pair's token0
     /// @param pathToPairToken1 The path to the pair's token1
-    function zapInToken(
+    function zapInFromToken(
         uint256 amountFrom,
         uint256 amount0Min,
         uint256 amount1Min,
         address[] calldata pathToPairToken0,
         address[] calldata pathToPairToken1
-    ) external nonReentrant {
-        require(amountFrom > 0, "Zap: Insufficient amount");
+    ) external nonReentrant returns (uint256 amountTo) {
+        require(amountFrom > 0, "Zap: Insufficient input amount");
+        require(
+            pathToPairToken0[0] == pathToPairToken1[0],
+            "Zap: Invalid start path"
+        );
+        // Call to factory to check if pair is valid
         address pair = factory.getPair(
             pathToPairToken0[pathToPairToken0.length - 1],
             pathToPairToken1[pathToPairToken1.length - 1]
-        ); // Not necessary, but improves contract clarity
+        ); 
         require(pair != address(0), "Zap: Invalid target path");
 
         address token = pathToPairToken0[0];
@@ -98,7 +101,14 @@ contract Zap is Ownable, ReentrancyGuard {
         TransferHelper.safeTransferFrom(token, _msgSender(), address(this), amountFrom);
         uint256 amountReceived = (IERC20(token).balanceOf(address(this))) - (previousBalance);
 
-        uint256 amountTo = _zapInToken(
+        // Send protocol fee if fee receiver address is set
+        if (feeTo != address(0) && protocolFee > 0){
+            uint256 amountFeeTo = amountReceived * protocolFee / 10000;
+            TransferHelper.safeTransfer(token, feeTo, amountFeeTo);
+            amountReceived = amountReceived - amountFeeTo;
+        }
+
+        amountTo = _zapInFromToken(
             token,
             amountReceived,
             amount0Min,
@@ -107,7 +117,7 @@ contract Zap is Ownable, ReentrancyGuard {
             pathToPairToken1
         );
 
-        emit ZapInToken(_msgSender(), token, amountFrom, pair, amountTo);
+        emit ZapInFromToken(_msgSender(), token, amountFrom, pair, amountTo);
     }
 
     /// @notice Swaps half of NativeCurrencyWrapper to token0 and the other half token1 and
@@ -117,35 +127,44 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @param amount1Min The min amount to token1 to add liquidity
     /// @param pathToPairToken0 The path to the pair's token0
     /// @param pathToPairToken1 The path to the pair's token1
-    function zapInNativeCurrencyWrapper(
+    function zapInFromNativeCurrency(
         uint256 amount0Min,
         uint256 amount1Min,
         address[] calldata pathToPairToken0,
         address[] calldata pathToPairToken1
-    ) external payable nonReentrant {
-        require(msg.value > 0, "Zap: Insufficient amount");
+    ) external payable nonReentrant returns (uint256 amountTo){
+        uint256 amountFrom = msg.value;
+        require(amountFrom > 0, "Zap: Insufficient input amount");
         require(
             pathToPairToken0[0] == nativeCurrencyWrapper && pathToPairToken1[0] == nativeCurrencyWrapper,
             "Zap: Invalid start path"
         );
+        // Call to factory to check if pair is valid
         address pair = factory.getPair(
             pathToPairToken0[pathToPairToken0.length - 1],
             pathToPairToken1[pathToPairToken1.length - 1]
-        ); // Not necessary, but improves contract clarity
+        );
         require(pair != address(0), "Zap: Invalid target path");
 
-        IWETH(nativeCurrencyWrapper).deposit{value: msg.value}();
+        // Send protocol fee if fee receiver address is set
+        if (feeTo != address(0) && protocolFee > 0){
+            uint256 amountFeeTo = amountFrom * protocolFee / 10000;
+            TransferHelper.safeTransferETH(feeTo, amountFeeTo);
+            amountFrom = amountFrom - amountFeeTo;
+        }
 
-        uint256 liquidity = _zapInToken(
+        IWETH(nativeCurrencyWrapper).deposit{value: amountFrom}();
+
+        amountTo = _zapInFromToken(
             nativeCurrencyWrapper,
-            msg.value,
+            amountFrom,
             amount0Min,
             amount1Min,
             pathToPairToken0,
             pathToPairToken1
         );
 
-        emit ZapInNativeCurrencyWrapper(_msgSender(), msg.value, pair, liquidity);
+        emit ZapInFromNativeCurrency(_msgSender(), msg.value, pair, amountTo);
     }
 
     /// @notice Unwrap Pair and swap the 2 tokens to path(0/1)[-1]
@@ -154,16 +173,20 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @param amountToMin The min amount to receive of tokenTo
     /// @param path0 The path to one of the pair's token
     /// @param path1 The path to one of the pair's token
-    function zapOutToken(
+    function zapOutToToken(
         uint256 amountFrom,
         uint256 amountToMin,
         address[] calldata path0,
         address[] calldata path1
-    ) external nonReentrant {
+    ) external nonReentrant returns (uint256 amountTo) {
+        require(
+            path0[path0.length - 1] == path1[path1.length - 1],
+            "Zap: invalid target path"
+        );
         IDXswapPair pairFrom = IDXswapPair(factory.getPair(path0[0], path1[0]));
         require(address(pairFrom) != address(0), "Zap: Invalid start path");
 
-        uint256 amount = _zapOutToken(
+        amountTo = _zapOutToToken(
             pairFrom,
             amountFrom,
             amountToMin,
@@ -172,7 +195,7 @@ contract Zap is Ownable, ReentrancyGuard {
             _msgSender()
         );
 
-        emit ZapOutToken(_msgSender(), address(pairFrom), amountFrom, path0[0], amount);
+        emit ZapOutToToken(_msgSender(), address(pairFrom), amountFrom, path0[path0.length - 1], amountTo);
     }
 
     /// @notice Unwrap Pair and swap the 2 tokens to path(0/1)[-1]
@@ -181,20 +204,21 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @param amountToMin The min amount to receive of token1
     /// @param path0 The path to one of the pair's token
     /// @param path1 The path to one of the pair's token
-    function zapOutNativeCurrencyWrapper(
+    function zapOutToNativeCurrency(
         uint256 amountFrom,
         uint256 amountToMin,
         address[] calldata path0,
         address[] calldata path1
-    ) external nonReentrant {
+    ) external nonReentrant returns (uint256 amountTo) {
         require(
-            path0[path0.length - 1] == nativeCurrencyWrapper,
+            path0[path0.length - 1] == nativeCurrencyWrapper &&
+            path1[path1.length - 1] == nativeCurrencyWrapper,
             "Zap: Invalid target path"
         );
         IDXswapPair pairFrom = IDXswapPair(factory.getPair(path0[0], path1[0]));
         require(address(pairFrom) != address(0), "Zap: Invalid start path");
 
-        uint256 amountNativeCurrencyWrapper = _zapOutToken(
+        amountTo = _zapOutToToken(
             pairFrom,
             amountFrom,
             amountToMin,
@@ -203,22 +227,20 @@ contract Zap is Ownable, ReentrancyGuard {
             address(this)
         );
 
-        IWETH(nativeCurrencyWrapper).withdraw(amountNativeCurrencyWrapper);
-        TransferHelper.safeTransferETH(_msgSender(), amountNativeCurrencyWrapper);
+        IWETH(nativeCurrencyWrapper).withdraw(amountTo);
+        TransferHelper.safeTransferETH(_msgSender(), amountTo);
 
-        emit ZapOutNativeCurrencyWrapper(
+        emit ZapOutToNativeCurrency(
             _msgSender(),
             address(pairFrom),
             amountFrom,
-            amountNativeCurrencyWrapper
+            amountTo
         );
     }
 
-    /// @notice Allows the contract to receive NativeCurrencyWrapper
-    /// @dev It is necessary to be able to receive NativeCurrencyWrapper when using nativeCurrencyWrapper.withdraw()
+    /// @notice Allows the contract to receive native currency
+    /// @dev It is necessary to be able to receive native currency when using nativeCurrencyWrapper.withdraw()
     receive() external payable {}
-
-    /* ========== RESTRICTED FUNCTIONS ========== */
 
     /// @notice Withdraw token to owner of the Zap contract
     /// @dev if token's address is null address, sends NativeCurrencyWrapper
@@ -232,8 +254,6 @@ contract Zap is Ownable, ReentrancyGuard {
         }
     }
 
-    /* ========== Private Functions ========== */
-
     /// @notice Swaps half of tokenFrom to token0 and the other half token1 and add liquidity
     /// with the swapped amounts
     /// @dev Any excess from adding liquidity is kept by Zap
@@ -244,7 +264,7 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @param pathToPairToken0 The path to the pair's token0
     /// @param pathToPairToken1 The path to the pair's token
     /// @return liquidity The amount of liquidity received
-    function _zapInToken(
+    function _zapInFromToken(
         address token,
         uint256 amountFrom,
         uint256 amount0Min,
@@ -252,10 +272,6 @@ contract Zap is Ownable, ReentrancyGuard {
         address[] calldata pathToPairToken0,
         address[] calldata pathToPairToken1
     ) private returns (uint256 liquidity) {
-        require(
-            pathToPairToken0[0] == pathToPairToken1[0],
-            "Zap: Invalid start path"
-        );
         _approveTokenIfNeeded(token, amountFrom);
 
         uint256 sellAmount = amountFrom / 2;
@@ -296,7 +312,7 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @param path1 The path to one of the pair's token
     /// @param to The address to send the token
     /// @return amountTo The amount of tokenTo received
-    function _zapOutToken(
+    function _zapOutToToken(
         IDXswapPair pair,
         uint256 amountFrom,
         uint256 amountToMin,
@@ -304,11 +320,7 @@ contract Zap is Ownable, ReentrancyGuard {
         address[] calldata path1,
         address to
     ) private returns (uint256 amountTo) {
-        require(amountFrom > 0, "Zap: Insufficient amount");
-        require(
-            path0[path0.length - 1] == path1[path1.length - 1],
-            "Zap: invalid end path"
-        );
+        require(amountFrom > 0, "Zap: Insufficient input amount");
         pair.transferFrom(_msgSender(), address(this), amountFrom);
 
         (uint256 balance0, uint256 balance1) = _removeLiquidity(
@@ -440,5 +452,27 @@ contract Zap is Ownable, ReentrancyGuard {
             IERC20(token0).balanceOf(address(this)) - balance0Before,
             IERC20(token1).balanceOf(address(this)) - balance1Before
         );
+    }
+
+    /// @notice Sets the fee receiver address 
+    /// @param _feeTo The address to send received zap fee 
+    function setFeeTo(address _feeTo) external {
+        require(msg.sender == feeToSetter, 'Zap: FORBIDDEN');
+        feeTo = _feeTo;
+    }
+
+    /// @notice Sets the setter address 
+    /// @param _feeToSetter The address of the fee setter 
+    function setFeeToSetter(address _feeToSetter) external {
+        require(msg.sender == feeToSetter, 'Zap: FORBIDDEN');
+        feeToSetter = _feeToSetter;
+    }
+    
+    /// @notice Sets the protocol fee percent
+    /// @param _protocolFee The new protocl fee percent 
+    function setProtocolFee(uint16 _protocolFee) external {
+        require(msg.sender == feeToSetter, 'Zap: FORBIDDEN');
+        require(_protocolFee <= 10000, 'Zap: FORBIDDEN_FEE');
+        protocolFee = _protocolFee;
     }
 }

@@ -23,6 +23,24 @@ const config: HardhatUserConfig = {
             runs: 200,
           },
         },
+      },
+      {
+        version: "0.6.6",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+      {
+        version: "0.5.16",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
       }
     ]
   },
@@ -33,13 +51,22 @@ const config: HardhatUserConfig = {
     },
     hardhat: {
       blockGasLimit: 30000000, //default 30 000 000
-      gasPrice: 1000000000, //10 Gwei	
+      gasPrice: 100000000000, //100 Gwei,
       gas: 9000000,
-      chainId: 1, //set mainnet ID
+      chainId: 100, //set GNOSIS ID
+      forking: {
+        enabled: true,
+        url: "https://rpc.gnosischain.com/",
+      },
+      live: false,
+      saveDeployments: true,
+      tags: ["test", "local"],
+      // loggingEnabled: true,
     },
     localhost: {
       url: "http://localhost:8545",
       gasPrice: 20000000000, //20 Gwei,
+      loggingEnabled: true
     },
     gnosis: {
       url: "https://rpc.gnosischain.com/",
