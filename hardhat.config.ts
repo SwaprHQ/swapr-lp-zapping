@@ -9,6 +9,7 @@ import "@typechain/hardhat";
 import "hardhat-deploy";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
+import "hardhat-dependency-compiler";
 
 dotenv.config();
 
@@ -46,9 +47,6 @@ const config: HardhatUserConfig = {
   },
   defaultNetwork: "hardhat",
   networks: {
-    ganache: {
-      url: "HTTP://127.0.0.1:7545",
-    },
     hardhat: {
       blockGasLimit: 30000000, //default 30 000 000
       gasPrice: 100000000000, //100 Gwei,
@@ -92,5 +90,14 @@ const config: HardhatUserConfig = {
   etherscan: {
     apiKey: process.env.ETHERSCAN_KEY,
   },
+  gasReporter: {
+    currency: "USD",
+    enabled: process.env.GAS_REPORT_ENABLED === "true",
+  },
+  dependencyCompiler: {
+    paths: [
+      './contracts/test',
+    ]
+  }
 };
 export default config;

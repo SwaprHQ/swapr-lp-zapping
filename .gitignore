@@ -5,3 +5,5 @@ contracts/.flattened
 build/
 deployments/
 typechain/
+coverage/
+coverage.json
