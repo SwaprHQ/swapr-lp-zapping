@@ -97,7 +97,7 @@ export async function fixtureLocalDeploy(wallet: SignerWithAddress): Promise<DXs
   await cowWeth.mint(wallet.address, overrides)
   
   // deploy Relayer and TradeRelayer
-  const zap = await new Zap__factory(wallet).deploy(dxswapFactory.address, dxswapRouter.address, WXDAI.address, wallet.address, overrides)
+  const zap = await new Zap__factory(wallet).deploy(wallet.address, dxswapFactory.address, dxswapRouter.address, WXDAI.address, wallet.address, overrides)
   
   return {
     zap,
