@@ -145,7 +145,7 @@ describe.only("Zap", function () {
     })
 
     it("Revert if an user tries to use withdraw", async function () {
-      await expect(zap.connect(user).withdraw(WXDAI.address)).to.be.revertedWith("Ownable: caller is not the owner")
+      await expect(zap.connect(user).withdraw(WXDAI.address)).to.be.revertedWith("OnlyOwner()")
     })
 
     it("Revert if allowance too low", async function () {

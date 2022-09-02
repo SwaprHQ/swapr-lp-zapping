@@ -89,7 +89,7 @@ const FEE_TO_SETTER = "0xe3f8f55d7709770a18a30b7e0d16ae203a2c034f"
 
   
   // deploy Relayer and TradeRelayer
-  const zap = await new Zap__factory(wallet).deploy(FACTORY_ADDRESS, ROUTER_ADDRESS, WXDAI_ADDRESS, FEE_TO_SETTER, overrides)
+  const zap = await new Zap__factory(wallet).deploy(wallet.address, FACTORY_ADDRESS, ROUTER_ADDRESS, WXDAI_ADDRESS, FEE_TO_SETTER, overrides)
   
   return {
     zap,
