@@ -52,6 +52,8 @@
     "test": "hardhat compile && hardhat test",
     "test:coverage": "hardhat coverage",
     "test:gasreport": "GAS_REPORT_ENABLED=true hardhat test",
-    "prepublishOnly": "yarn test"
+    "prepublishOnly": "yarn test",
+    "deploy:rinkeby": "npx hardhat deploy --network rinkeby --tags CONTRACTS",
+    "build-package": "ts-node scripts/bundler.ts"
   }
 }

@@ -18,6 +18,14 @@ This repository contains Zap contract which allows Swapr user to convert single-
 
 `yarn test`
 
-## Flatten Contracts
+## Deployment
 
-`yarn flattener`
+Add `PRIVATE_KEY` of deployer to `.env`
+
+```shell
+echo "PRIVATE_KEY=<private-key>" > .env
+```
+
+Deploy to target network. Make sure its configuration exists in `hardhat.config.ts`
+
+`yarn deploy:<target_network>`
