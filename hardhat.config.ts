@@ -13,6 +13,9 @@ import "hardhat-dependency-compiler";
 
 dotenv.config();
 
+const infuraKey = process.env.INFURA_KEY;
+const accounts = process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [];
+
 const config: HardhatUserConfig = {
   solidity: {
     compilers: [
@@ -66,10 +69,24 @@ const config: HardhatUserConfig = {
       gasPrice: 20000000000, //20 Gwei,
       loggingEnabled: true
     },
-    gnosis: {
-      url: "https://rpc.gnosischain.com/",
-      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    mainnet: {
+      live: true,
+      saveDeployments: true,
+      url: `https://mainnet.infura.io/v3/${infuraKey}`,
+      accounts,
     },
+    gnosis: {
+      live: true,
+      saveDeployments: true,
+      url: "https://rpc.gnosischain.com/",
+      accounts,
+    },
+    rinkeby: {
+      live: false,
+      saveDeployments: true,
+      url: `https://rinkeby.infura.io/v3/${infuraKey}`,
+      accounts,
+  },
   },
   typechain: {
     outDir: "typechain",
@@ -82,8 +99,11 @@ const config: HardhatUserConfig = {
     deployments: "deployments",  
     sources: "contracts",
   },
+  // namedAccounts are used if no config is found for given network in deploy/deployment.config.ts
   namedAccounts: {
-    deployer: 0,
+    deployer: {
+      default: 0,
+  },
     account1: 1,
     account2: 2,
   },
