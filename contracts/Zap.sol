@@ -174,7 +174,7 @@ contract Zap is Ownable, ReentrancyGuard {
         address[] calldata path0,
         address[] calldata path1
     ) external nonReentrant returns (uint256 amountTo) {
-        require(path0[path0.length - 1] == path1[path1.length - 1], 'Zap: invalid target path');
+        require(path0[path0.length - 1] == path1[path1.length - 1], 'Zap: Invalid target path');
         IDXswapPair pairFrom = IDXswapPair(factory.getPair(path0[0], path1[0]));
         require(address(pairFrom) != address(0), 'Zap: Invalid start path');
 
