@@ -7,3 +7,4 @@ deployments/
 typechain/
 coverage/
 coverage.json
+bundle/

@@ -18,7 +18,7 @@ export type ContractsAddresses = {
 // CONFIG
 const config = {
     paths: {
-        outDir: join(ROOT, "swapr-lp-zapping"), // Path to root folder
+        outDir: join(ROOT, "bundle/swapr-lp-zapping"), // Path to root folder
         deployments: join(ROOT, "deployments"), // Path to folder with deployments (compatible with hardhat-deploy only)
         artifacts: join(ROOT, "build/artifacts"), // Path to folder with artifacts to be copied
     },
@@ -251,7 +251,7 @@ const createIndexFile = async () => {
         const chainToAddresses: { [chainId: number]: ContractAddresses } = addresses;
     
         if (chainToAddresses[chainId] === undefined) {
-            throw new Error(\`Unknown chain id (\${chainId}). No known aqua contracts have been deployed on this chain.\`);
+            throw new Error(\`Unknown chain id (\${chainId}). No known contracts have been deployed on this chain.\`);
         }
         return chainToAddresses[chainId];
     }
@@ -281,7 +281,7 @@ const createIndexFile = async () => {
 };
 
 const run = async () => {
-    log(`Swapr-lp-zapping contract bundler`);
+    log(`LP-Zap contract bundler`);
     log("=====================");
     log("Cleaning old files...");
     await recreateDirs([

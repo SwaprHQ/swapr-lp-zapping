@@ -13,7 +13,7 @@ import "hardhat-dependency-compiler";
 
 dotenv.config();
 
-const infuraKey = process.env.INFURA_KEY;
+const infuraKey = process.env.INFURA_API_KEY;
 const accounts = process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [];
 
 const config: HardhatUserConfig = {
@@ -108,7 +108,7 @@ const config: HardhatUserConfig = {
     account2: 2,
   },
   etherscan: {
-    apiKey: process.env.ETHERSCAN_KEY,
+    apiKey: process.env.ETHERSCAN_API_KEY,
   },
   gasReporter: {
     currency: "USD",

@@ -11,7 +11,7 @@ const deployment: DeployFunction = async function (
     const { deploy } = deployments;
 
     const { deployer } = await getNamedAccounts();
-    const config = await getDeploymentConfig(network.name)
+    const config = getDeploymentConfig(network.name)
 
     const constructorArgs = contractConstructorArgs<Zap__factory>(
         config?.owner || deployer,

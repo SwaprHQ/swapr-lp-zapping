@@ -5,7 +5,7 @@ type ZapDeploymentParams = {
     factory: string;
     router: string;
     nativeCurrencyWrapper: string;
-    feeToSetter: string;   
+    feeToSetter: string;
 };
 
 const deploymentConfig: { [k:string]: ZapDeploymentParams} = {
@@ -22,6 +22,13 @@ const deploymentConfig: { [k:string]: ZapDeploymentParams} = {
         router: "0xE43e60736b1cb4a75ad25240E2f9a62Bff65c0C0",
         nativeCurrencyWrapper: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
         feeToSetter: "0xe3f8f55d7709770a18a30b7e0d16ae203a2c034f",
+    },
+    rinkeby: {
+        owner: "",
+        factory: "",
+        router: "",
+        nativeCurrencyWrapper: "",
+        feeToSetter: "",
     },
 };
 

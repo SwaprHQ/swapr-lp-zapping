@@ -49,11 +49,12 @@
     "clean": "rimraf ./build/",
     "precompile": "yarn clean",
     "compile": "hardhat compile",
-    "test": "hardhat compile && hardhat test",
+    "test": "compile && hardhat test",
     "test:coverage": "hardhat coverage",
     "test:gasreport": "GAS_REPORT_ENABLED=true hardhat test",
     "prepublishOnly": "yarn test",
-    "deploy:rinkeby": "npx hardhat deploy --network rinkeby --tags CONTRACTS",
+    "deploy:rinkeby": "hardhat deploy --network rinkeby --tags CONTRACTS",
+    "verify:rinkeby": "set -a; . ./.env; set +a; npx hardhat --network rinkeby etherscan-verify --api-key \"$ETHERSCAN_API_KEY\"",
     "build-package": "ts-node scripts/bundler.ts"
   }
 }
