@@ -49,7 +49,7 @@
     "clean": "rimraf ./build/",
     "precompile": "yarn clean",
     "compile": "hardhat compile",
-    "test": "compile && hardhat test",
+    "test": "yarn compile && hardhat test",
     "test:coverage": "hardhat coverage",
     "test:gasreport": "GAS_REPORT_ENABLED=true hardhat test",
     "prepublishOnly": "yarn test",

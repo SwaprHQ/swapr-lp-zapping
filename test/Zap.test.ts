@@ -103,7 +103,7 @@ describe.only("Zap", function () {
           value: amountIn,
           gasLimit: 9999999,
         })
-      ).to.be.revertedWith("Zap: insufficient swap amounts")
+      ).to.be.revertedWith("InsufficientSwapMinAmount()")
       
       amountOut = await getAmountOut(WXDAI.address, wethXdai)
       await expect(
@@ -111,14 +111,14 @@ describe.only("Zap", function () {
           value: amountIn,
           gasLimit: 9999999,
         })
-      ).to.be.revertedWith("Zap: insufficient swap amounts")
+      ).to.be.revertedWith("InsufficientSwapMinAmount()")
 
       await expect(
         zap.connect(impersonated).zapInFromNativeCurrency(0, 0, [WXDAI.address, GNO.address], [WXDAI.address, WETH.address], {
           value: 0,
           gasLimit: 9999999,
         })
-      ).to.be.revertedWith("Zap: Insufficient input amount")
+      ).to.be.revertedWith("InsufficientTokenInputAmount()")
     })
 
     it("Revert on zapInFromTokens", async function () {
@@ -126,10 +126,10 @@ describe.only("Zap", function () {
       let amountOut = ethers.utils.parseEther("99")
       await expect(
         zap.connect(impersonated).zapInFromToken(amountIn, amountOut, 0, [DXD.address, WETH.address], [DXD.address, GNO.address])
-        ).to.be.revertedWith("Zap: insufficient swap amounts")
+        ).to.be.revertedWith("InsufficientSwapMinAmount()")
       await expect(
         zap.connect(impersonated).zapInFromToken(amountIn, 0, amountOut, [DXD.address, WETH.address], [DXD.address, GNO.address])
-      ).to.be.revertedWith("Zap: insufficient swap amounts")
+      ).to.be.revertedWith("InsufficientSwapMinAmount()")
     })
 
     it("Revert on zapOutToNativeCurrency", async function () {
@@ -147,7 +147,7 @@ describe.only("Zap", function () {
         zap
         .connect(impersonated)
         .zapOutToToken(await wethGno.balanceOf(impersonated.address), ethers.utils.parseEther("100"), [GNO.address, WXDAI.address], [WETH.address, WXDAI.address])
-        ).to.be.revertedWith("Zap: insufficient swap amounts")
+        ).to.be.revertedWith("InsufficientSwapMinAmount()")
     })
 
     it("Revert if an user tries to use withdraw", async function () {
@@ -174,25 +174,25 @@ describe.only("Zap", function () {
       await expect(
       zap.connect(impersonated)
       .zapInFromNativeCurrency(0, 0, [WXDAI.address, randomSigner.address], [WXDAI.address], { value: amountIn, gasLimit: 9999999 })
-      ).to.be.revertedWith("Zap: Invalid target path") 
+      ).to.be.revertedWith("InvalidPair()") 
 
       // zap in 
       await expect(
       zap.connect(impersonated)
       .zapInFromToken(amountIn, 0, 0, [WXDAI.address, randomSigner.address], [COW.address, WXDAI.address], overrides)
-      ).to.be.revertedWith("Zap: Invalid start path") 
+      ).to.be.revertedWith("InvalidStartPath()") 
       
       // zap out 
       await expect(
         zap.connect(impersonated)
         .zapOutToToken(0, 0, [WXDAI.address, randomSigner.address], [WXDAI.address], overrides)
-        ).to.be.revertedWith("Zap: Invalid target path")
+        ).to.be.revertedWith("InvalidTargetPath()")
 
       // zap out 
       await expect(
         zap.connect(impersonated)
         .zapOutToToken(0, 0, [randomSigner.address, SWPR.address], [WXDAI.address, SWPR.address], overrides)
-        ).to.be.revertedWith("Zap: Invalid start path")
+        ).to.be.revertedWith("InvalidPair()")
     })
   })
 
@@ -514,15 +514,15 @@ describe.only("Zap", function () {
     })
     it("Revert if caller is not owner", async function () {
       await expect(zap.connect(impersonated).setFeeTo(user.address, overrides))
-      .to.be.revertedWith('Zap: FORBIDDEN')
+      .to.be.revertedWith("OnlyFeeSetter()")
       await expect(zap.connect(impersonated).setFeeToSetter(user.address, overrides))
-      .to.be.revertedWith('Zap: FORBIDDEN')
+      .to.be.revertedWith("OnlyFeeSetter()")
       await expect(zap.connect(impersonated).setProtocolFee(100, overrides))
-      .to.be.revertedWith('Zap: FORBIDDEN')
+      .to.be.revertedWith("OnlyFeeSetter()")
     })
     it("Revert if invalid fee value", async function () {
       await expect(zap.connect(feeSetter).setProtocolFee(BigNumber.from(11000), overrides))
-      .to.be.revertedWith('Zap: FORBIDDEN_FEE')
+      .to.be.revertedWith("ForbiddenFeeValue()")
     })
     it("Set protocol fee", async function () {
       await zap.connect(feeSetter).setProtocolFee(BigNumber.from(100), overrides)

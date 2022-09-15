@@ -1,22 +1,23 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.15;
 
+import {IDXswapFactory} from '@swapr/core/contracts/interfaces/IDXswapFactory.sol';
+import {IDXswapPair} from '@swapr/core/contracts/interfaces/IDXswapPair.sol';
+import {IERC20} from '@swapr/core/contracts/interfaces/IERC20.sol';
+import {IWETH} from '@swapr/core/contracts/interfaces/IWETH.sol';
+import {IDXswapRouter} from '@swapr/periphery/contracts/interfaces/IDXswapRouter.sol';
+import {TransferHelper} from '@swapr/periphery/contracts/libraries/TransferHelper.sol';
 import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
-import '@swapr/core/contracts/interfaces/IDXswapFactory.sol';
-import '@swapr/core/contracts/interfaces/IDXswapPair.sol';
-import '@swapr/core/contracts/interfaces/IERC20.sol';
-import '@swapr/core/contracts/interfaces/IWETH.sol';
-import '@swapr/periphery/contracts/interfaces/IDXswapRouter.sol';
-import '@swapr/periphery/contracts/libraries/TransferHelper.sol';
 import './peripherals/Ownable.sol';
 
 error ForbiddenFeeValue();
+error InsufficientSwapMinAmount();
+error InsufficientTokenInputAmount();
+error InvalidPair();
 error InvalidStartPath();
 error InvalidTargetPath();
 error OnlyFeeSetter();
 error ZeroAddressInput();
-error InsufficientSwapMinAmount();
-error InsufficientTokenInputAmount();
 
 /// @title Zap
 /// @notice Allows to zapIn from an ERC20 or native currency to ERC20 pair
@@ -98,11 +99,10 @@ contract Zap is Ownable, ReentrancyGuard {
         if (amountFrom == 0) revert InsufficientTokenInputAmount();
         if (pathToPairToken0[0] != pathToPairToken1[0]) revert InvalidStartPath();
         // Call to factory to check if pair is valid
-        address pair = factory.getPair(
+        address pair = _getFactoryPair(
             pathToPairToken0[pathToPairToken0.length - 1],
             pathToPairToken1[pathToPairToken1.length - 1]
         );
-        if (pair == address(0)) revert InvalidTargetPath();
 
         address token = pathToPairToken0[0];
 
@@ -113,12 +113,15 @@ contract Zap is Ownable, ReentrancyGuard {
 
         // Send protocol fee if fee receiver address is set
         if (feeTo != address(0) && protocolFee > 0) {
-            uint256 amountFeeTo = (amountReceived * protocolFee) / 10000;
+            uint256 amountFeeTo;
+            unchecked {
+                amountFeeTo = (amountReceived * protocolFee) / 10000;
+                amountReceived = amountReceived - amountFeeTo;
+            }
             TransferHelper.safeTransfer(token, feeTo, amountFeeTo);
-            amountReceived = amountReceived - amountFeeTo;
         }
 
-        amountTo = _zapInFromToken(token, amountReceived, amount0Min, amount1Min, pathToPairToken0, pathToPairToken1);
+        amountTo = _zapInFromToken(amountReceived, amount0Min, amount1Min, pathToPairToken0, pathToPairToken1);
 
         emit ZapInFromToken(msg.sender, token, amountFrom, pair, amountTo);
     }
@@ -141,29 +144,24 @@ contract Zap is Ownable, ReentrancyGuard {
         if (pathToPairToken0[0] != nativeCurrencyWrapper || pathToPairToken1[0] != nativeCurrencyWrapper)
             revert InvalidStartPath();
         // Call to factory to check if pair is valid
-        address pair = factory.getPair(
+        address pair = _getFactoryPair(
             pathToPairToken0[pathToPairToken0.length - 1],
             pathToPairToken1[pathToPairToken1.length - 1]
         );
-        if (pair == address(0)) revert InvalidTargetPath();
 
         // Send protocol fee if fee receiver address is set
         if (feeTo != address(0) && protocolFee > 0) {
-            uint256 amountFeeTo = (amountFrom * protocolFee) / 10000;
+            uint256 amountFeeTo;
+            unchecked {
+                amountFeeTo = (amountFrom * protocolFee) / 10000;
+                amountFrom = amountFrom - amountFeeTo;
+            }
             TransferHelper.safeTransferETH(feeTo, amountFeeTo);
-            amountFrom = amountFrom - amountFeeTo;
         }
 
         IWETH(nativeCurrencyWrapper).deposit{value: amountFrom}();
 
-        amountTo = _zapInFromToken(
-            nativeCurrencyWrapper,
-            amountFrom,
-            amount0Min,
-            amount1Min,
-            pathToPairToken0,
-            pathToPairToken1
-        );
+        amountTo = _zapInFromToken(amountFrom, amount0Min, amount1Min, pathToPairToken0, pathToPairToken1);
 
         emit ZapInFromNativeCurrency(msg.sender, msg.value, pair, amountTo);
     }
@@ -182,9 +180,7 @@ contract Zap is Ownable, ReentrancyGuard {
     ) external nonReentrant returns (uint256 amountTo) {
         if (path0[path0.length - 1] != path1[path1.length - 1]) revert InvalidTargetPath();
 
-        IDXswapPair pairFrom = IDXswapPair(factory.getPair(path0[0], path1[0]));
-        if (address(pairFrom) == address(0)) revert InvalidStartPath();
-
+        IDXswapPair pairFrom = IDXswapPair(_getFactoryPair(path0[0], path1[0]));
         amountTo = _zapOutToToken(pairFrom, amountFrom, amountToMin, path0, path1, msg.sender);
 
         emit ZapOutToToken(msg.sender, address(pairFrom), amountFrom, path0[path0.length - 1], amountTo);
@@ -205,9 +201,7 @@ contract Zap is Ownable, ReentrancyGuard {
         if (path0[path0.length - 1] != nativeCurrencyWrapper || path1[path1.length - 1] != nativeCurrencyWrapper)
             revert InvalidTargetPath();
 
-        IDXswapPair pairFrom = IDXswapPair(factory.getPair(path0[0], path1[0]));
-        if (address(pairFrom) == address(0)) revert InvalidStartPath();
-
+        IDXswapPair pairFrom = IDXswapPair(_getFactoryPair(path0[0], path1[0]));
         amountTo = _zapOutToToken(pairFrom, amountFrom, amountToMin, path0, path1, address(this));
 
         IWETH(nativeCurrencyWrapper).withdraw(amountTo);
@@ -235,7 +229,6 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @notice Swaps half of tokenFrom to token0 and the other half token1 and add liquidity
     /// with the swapped amounts
     /// @dev Any excess from adding liquidity is kept by Zap
-    /// @param token The token to zap from
     /// @param amountFrom The amountFrom of tokenFrom to zap
     /// @param amount0Min The min amount to receive of token0
     /// @param amount1Min The min amount to receive of token1
@@ -243,18 +236,20 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @param pathToPairToken1 The path to the pair's token
     /// @return liquidity The amount of liquidity received
     function _zapInFromToken(
-        address token,
         uint256 amountFrom,
         uint256 amount0Min,
         uint256 amount1Min,
         address[] calldata pathToPairToken0,
         address[] calldata pathToPairToken1
-    ) private returns (uint256 liquidity) {
-        _approveTokenIfNeeded(token, amountFrom);
-
-        uint256 sellAmount = amountFrom / 2;
-        uint256 amount0 = _swapExactTokensForTokens(sellAmount, 0, pathToPairToken0, address(this));
-        uint256 amount1 = _swapExactTokensForTokens(amountFrom - sellAmount, 0, pathToPairToken1, address(this));
+    ) internal returns (uint256 liquidity) {
+        uint256 amountFromToken0;
+        uint256 amountFromToken1;
+        unchecked {
+            amountFromToken0 = amountFrom / 2;
+            amountFromToken1 = amountFrom - amountFromToken0;
+        }
+        uint256 amount0 = _swapExactTokensForTokens(amountFromToken0, 0, pathToPairToken0, address(this));
+        uint256 amount1 = _swapExactTokensForTokens(amountFromToken1, 0, pathToPairToken1, address(this));
 
         if (amount0 < amount0Min || amount1 < amount1Min) revert InsufficientSwapMinAmount();
 
@@ -277,7 +272,7 @@ contract Zap is Ownable, ReentrancyGuard {
         address[] calldata path0,
         address[] calldata path1,
         address to
-    ) private returns (uint256 amountTo) {
+    ) internal returns (uint256 amountTo) {
         if (amountFrom == 0) revert InsufficientTokenInputAmount();
         pair.transferFrom(msg.sender, address(this), amountFrom);
 
@@ -296,7 +291,7 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @notice Approves the token if needed
     /// @param token The address of the token
     /// @param amount The amount of token to send
-    function _approveTokenIfNeeded(address token, uint256 amount) private {
+    function _approveTokenIfNeeded(address token, uint256 amount) internal {
         if (IERC20(token).allowance(address(this), address(router)) < amount) {
             TransferHelper.safeApprove(token, address(router), amount);
         }
@@ -313,11 +308,12 @@ contract Zap is Ownable, ReentrancyGuard {
         uint256 amountToMin,
         address[] calldata path,
         address to
-    ) private returns (uint256 amountTo) {
+    ) internal returns (uint256 amountTo) {
         uint256 len = path.length;
         address token = path[len - 1];
         uint256 balanceBefore = IERC20(token).balanceOf(to);
 
+        // swap tokens following the path
         if (len > 1) {
             _approveTokenIfNeeded(path[0], amountFrom);
             router.swapExactTokensForTokensSupportingFeeOnTransferTokens(
@@ -329,10 +325,13 @@ contract Zap is Ownable, ReentrancyGuard {
             );
             amountTo = IERC20(token).balanceOf(to) - balanceBefore;
         } else {
+            // no swap needed because path is only 1-element
             if (to != address(this)) {
+                // transfer token to receiver address
                 TransferHelper.safeTransfer(token, to, amountFrom);
                 amountTo = IERC20(token).balanceOf(to) - balanceBefore;
             } else {
+                // ZapIn case: token already on Zap contract balance
                 amountTo = amountFrom;
             }
         }
@@ -354,7 +353,7 @@ contract Zap is Ownable, ReentrancyGuard {
         uint256 amount1Min,
         address[] calldata pathToPairToken0,
         address[] calldata pathToPairToken1
-    ) private returns (uint256 liquidity) {
+    ) internal returns (uint256 liquidity) {
         (address token0, address token1) = (
             pathToPairToken0[pathToPairToken0.length - 1],
             pathToPairToken1[pathToPairToken1.length - 1]
@@ -380,7 +379,7 @@ contract Zap is Ownable, ReentrancyGuard {
     /// @param pair The address of the pair
     /// @return token0Balance The actual amount of token0 received
     /// @return token1Balance The actual amount of token received
-    function _removeLiquidity(IDXswapPair pair, uint256 amount) private returns (uint256, uint256) {
+    function _removeLiquidity(IDXswapPair pair, uint256 amount) internal returns (uint256, uint256) {
         _approveTokenIfNeeded(address(pair), amount);
 
         address token0 = pair.token0();
@@ -394,6 +393,15 @@ contract Zap is Ownable, ReentrancyGuard {
             IERC20(token0).balanceOf(address(this)) - balance0Before,
             IERC20(token1).balanceOf(address(this)) - balance1Before
         );
+    }
+
+    /// @notice Gets and validates pair's address
+    /// @param token0 The addres of the first token of the pair
+    /// @param token1 The addres of the second token of the pair
+    /// @return pair The address of the pair
+    function _getFactoryPair(address token0, address token1) internal view returns (address pair) {
+        pair = factory.getPair(token0, token1);
+        if (pair == address(0)) revert InvalidPair();
     }
 
     /// @notice Sets the fee receiver address
