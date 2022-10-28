@@ -8,7 +8,10 @@ interface DXswapFixture {
   zap: Zap
   dxswapRouter: DXswapRouter
   dxswapFactory: DXswapFactory
-    
+  dex2Router: DXswapRouter
+  dex2Factory: DXswapFactory
+  dex3Router: DXswapRouter
+  dex3Factory: DXswapFactory  
   WETH: WETH9
   WXDAI: WXDAI
   GNO: ERC20
@@ -33,6 +36,8 @@ export async function dxswapFixture(wallet: SignerWithAddress): Promise<DXswapFi
   const overrides = {
     gasLimit: 9999999
   }
+
+// GNOSIS CHAIN addresses 
 const WETH_ADDRESS = "0x6a023ccd1ff6f2045c3309768ead9e68f978f6e1"
 const WXDAI_ADDRESS = "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d"
 const GNO_ADDRESS = "0x9c58bacc331c9aa871afd802db6379a98e80cedb"
@@ -40,8 +45,17 @@ const DXD_ADDRESS = "0xb90D6bec20993Be5d72A5ab353343f7a0281f158"
 const COW_ADDRESS = "0x177127622c4A00F3d409B75571e12cB3c8973d3c"
 const SWPR_ADDRESS = "0x532801ED6f82FFfD2DAB70A19fC2d7B2772C4f4b"
 
-const ROUTER_ADDRESS = "0xE43e60736b1cb4a75ad25240E2f9a62Bff65c0C0"
-const FACTORY_ADDRESS = "0x5D48C95AdfFD4B40c1AAADc4e08fc44117E02179"
+// dex: swapr
+const SWPR_ROUTER_ADDRESS = "0xE43e60736b1cb4a75ad25240E2f9a62Bff65c0C0"
+const SWPR_FACTORY_ADDRESS = "0x5D48C95AdfFD4B40c1AAADc4e08fc44117E02179"
+
+// dex: levinswap
+const DEX2_ROUTER_ADDRESS = "0xb18d4f69627F8320619A696202Ad2C430CeF7C53"
+const DEX2_FACTORY_ADDRESS = "0x965769C9CeA8A7667246058504dcdcDb1E2975A5"
+
+// dex: honeyswap
+const DEX3_ROUTER_ADDRESS = "0x1C232F01118CB8B424793ae03F870aa7D0ac7f77"
+const DEX3_FACTORY_ADDRESS = "0xA818b4F111Ccac7AA31D0BCc0806d64F2E0737D7"
 
 const WETH_XDAI_ADDRESS = "0x1865d5445010e0baf8be2eb410d3eae4a68683c2"
 const SWPR_XDAI_ADDRESS = "0xa82029c1E11eA0aC18dd3551c6E670787e12E45E"
@@ -69,11 +83,15 @@ const FEE_TO_SETTER = "0xe3f8f55d7709770a18a30b7e0d16ae203a2c034f"
 
   // deploy DXswapFactory
   const swapFactory = await ethers.getContractFactory("DXswapFactory")
-  const dxswapFactory = swapFactory.attach(FACTORY_ADDRESS)
+  const dxswapFactory = swapFactory.attach(SWPR_FACTORY_ADDRESS)
+  const dex2Factory = swapFactory.attach(DEX2_FACTORY_ADDRESS)
+  const dex3Factory = swapFactory.attach(DEX3_FACTORY_ADDRESS)
 
   // deploy router  
   const routerFactory = await ethers.getContractFactory("DXswapRouter")
-  const dxswapRouter = routerFactory.attach(ROUTER_ADDRESS)
+  const dxswapRouter = routerFactory.attach(SWPR_ROUTER_ADDRESS)
+  const dex2Router = routerFactory.attach(DEX2_ROUTER_ADDRESS)
+  const dex3Router = routerFactory.attach(DEX3_ROUTER_ADDRESS)
 
   // initialize DXswapPair factory
   const dxSwapPair_factory = await ethers.getContractFactory("DXswapPair")
@@ -89,12 +107,16 @@ const FEE_TO_SETTER = "0xe3f8f55d7709770a18a30b7e0d16ae203a2c034f"
 
   
   // deploy Relayer and TradeRelayer
-  const zap = await new Zap__factory(wallet).deploy(wallet.address, FACTORY_ADDRESS, ROUTER_ADDRESS, WXDAI_ADDRESS, FEE_TO_SETTER, overrides)
+  const zap = await new Zap__factory(wallet).deploy(wallet.address, FEE_TO_SETTER, WXDAI_ADDRESS, overrides)
   
   return {
     zap,
     dxswapRouter,
-    dxswapFactory, 
+    dxswapFactory,
+    dex2Router,
+    dex2Factory,
+    dex3Router,
+    dex3Factory, 
     WETH,
     WXDAI,
     GNO,

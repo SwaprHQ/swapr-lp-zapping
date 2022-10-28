@@ -25,9 +25,16 @@ const deploymentConfig: { [k:string]: ZapDeploymentParams} = {
     },
     rinkeby: {
         owner: "",
-        factory: "",
-        router: "",
-        nativeCurrencyWrapper: "",
+        factory: "0x1D354f628Bf088Cc28a59AEf4A47FBE14Aa9985B",
+        router: "0x0Ee602c11858f99aA48C7c0093a2D5F68316f05A",
+        nativeCurrencyWrapper: "0xc778417E063141139Fce010982780140Aa0cD5Ab",
+        feeToSetter: "",
+    },
+    goerli: {
+        owner: "",
+        factory: "0xa3Dd335F8107527796642D044a5bD0A94De4E0E4",
+        router: "0x7AEE640f8085B2Dee7e1B146F5802800a9b53d03",
+        nativeCurrencyWrapper: "0xB4FBF271143F4FBf7B91A5ded31805e42b2208d6",
         feeToSetter: "",
     },
 };

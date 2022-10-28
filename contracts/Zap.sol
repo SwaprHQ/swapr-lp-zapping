@@ -180,13 +180,11 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenB,
         address affiliate
     ) internal returns (uint256 amountAToInvest, uint256 amountBToInvest) {
-        // check if start token is the same for both paths
-        if (swapTokenA.path[0] != swapTokenB.path[0]) revert InvalidStartPath();
         address fromToken = swapTokenA.path[0];
         uint256 totalAmount = swapTokenA.amount + swapTokenB.amount;
 
         if (fromToken == address(0)) {
-            if (msg.value != totalAmount) revert InvalidInputAmount();
+            if (msg.value == 0 || msg.value != totalAmount) revert InvalidInputAmount();
 
             // subtract protocol fee
             return (

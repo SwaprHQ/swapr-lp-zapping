@@ -14,11 +14,9 @@ const deployment: DeployFunction = async function (
     const config = getDeploymentConfig(network.name)
 
     const constructorArgs = contractConstructorArgs<Zap__factory>(
-        config?.owner || deployer,
-        config?.factory || deployer,
-        config?.router || deployer,
+        deployer,
+        deployer,
         config?.nativeCurrencyWrapper || deployer,
-        config?.feeToSetter || deployer,
     )
 
     const deployResult = await deploy("Zap", {

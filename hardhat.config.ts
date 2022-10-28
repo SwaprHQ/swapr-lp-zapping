@@ -10,6 +10,7 @@ import "hardhat-deploy";
 import "hardhat-gas-reporter";
 import "solidity-coverage";
 import "hardhat-dependency-compiler";
+import "hardhat-contract-sizer";
 
 dotenv.config();
 
@@ -19,6 +20,19 @@ const accounts = process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [];
 const config: HardhatUserConfig = {
   solidity: {
     compilers: [
+      {
+        version: "0.8.17",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+            details: {
+              yul: true
+            }
+          },
+          // viaIR: true
+        },
+      },
       {
         version: "0.8.15",
         settings: {
@@ -86,7 +100,13 @@ const config: HardhatUserConfig = {
       saveDeployments: true,
       url: `https://rinkeby.infura.io/v3/${infuraKey}`,
       accounts,
-  },
+    },
+    goerli: {
+      live: false,
+      saveDeployments: true,
+      url: `https://goerli.infura.io/v3/${infuraKey}`,
+      accounts,
+    },
   },
   typechain: {
     outDir: "typechain",
