@@ -35,10 +35,17 @@ struct SwapTx {
     uint8 dexIndex;
 }
 
-struct ZapTx {
+struct ZapInTx {
     uint256 amountAMin;
     uint256 amountBMin;
     uint256 amountLPMin;
+    uint8 dexIndex;
+    address to;
+}
+
+struct ZapOutTx {
+    uint256 amountLpFrom;
+    uint256 amountTokenToMin;
     uint8 dexIndex;
     address to;
 }
@@ -94,10 +101,12 @@ contract Zap is Ownable, ReentrancyGuard {
         }
     }
 
-    /// @notice Constructor
-    /// @param _owner The address of contract owner
-    /// @param _feeToSetter The address setter of fee receiver
-    /// @param _nativeCurrencyWrapper The address of wrapped native currency
+    /**  
+    @notice Constructor
+    @param _owner The address of contract owner
+    @param _feeToSetter The address setter of fee receiver
+    @param _nativeCurrencyWrapper The address of wrapped native currency
+    */
     constructor(
         address _owner,
         address _feeToSetter,
@@ -115,16 +124,14 @@ contract Zap is Ownable, ReentrancyGuard {
     function zapIn(
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB,
-        ZapTx calldata zap,
+        ZapInTx calldata zap,
         address affiliate,
         bool transferResidual
     ) external payable nonReentrant stopInEmergency returns (uint256 lpBought, address lpToken) {
         // check if start token is the same for both paths
         if (swapTokenA.path[0] != swapTokenB.path[0]) revert InvalidStartPath();
 
-        // TODO calculate amount to invest
         (uint256 amountAToInvest, uint256 amountBToInvest) = _pullTokens(swapTokenA, swapTokenB, affiliate);
-
         (lpBought, lpToken) = _performZapIn(
             amountAToInvest,
             amountBToInvest,
@@ -143,91 +150,159 @@ contract Zap is Ownable, ReentrancyGuard {
     /**
     @notice ZapTx out LP token in a single token
     @dev path0 and path1 do not need to be ordered
-    @param amountLpFrom The amount of liquidity to zap
-    @param amountToMin The min amount to receive of tokenTo
-
     @param affiliate Affiliate address
     */
     function zapOut(
-        uint256 amountLpFrom,
-        uint256 amountToMin,
+        ZapOutTx calldata zap,
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB,
-        ZapTx calldata zap,
-        address to,
         address affiliate
-    ) public nonReentrant stopInEmergency returns (uint256 amountTransferred, address tokenTo) {
+    ) external nonReentrant stopInEmergency returns (uint256 amountTransferred, address tokenTo) {
         // check if target token is the same for both paths
         if (swapTokenA.path[swapTokenA.path.length - 1] != swapTokenB.path[swapTokenB.path.length - 1])
             revert InvalidTargetPath();
         tokenTo = swapTokenA.path[swapTokenA.path.length - 1];
 
-        (uint256 amountTo, address lpToken) = _performZapOut(amountLpFrom, swapTokenA, swapTokenB, zap);
-        if (amountTo < amountToMin) revert InsufficientMinAmount();
+        (uint256 amountTo, address lpToken) = _performZapOut(zap, swapTokenA, swapTokenB);
 
-        amountTransferred = _getFeeAndTransferTokens(tokenTo, amountTo, to, affiliate);
+        amountTransferred = _getFeeAndTransferTokens(tokenTo, amountTo, zap.to, affiliate);
+        if (amountTransferred < zap.amountTokenToMin) revert InsufficientMinAmount();
 
-        emit ZapOut(msg.sender, lpToken, amountLpFrom, tokenTo, amountTransferred);
+        emit ZapOut(msg.sender, lpToken, zap.amountLpFrom, tokenTo, amountTransferred);
     }
 
-    // - to Pause the contract
+    // - to pause the contract
     function toggleContractActive() public onlyOwner {
         stopped = !stopped;
     }
 
-    function _pullTokens(
-        SwapTx calldata swapTokenA,
-        SwapTx calldata swapTokenB,
-        address affiliate
-    ) internal returns (uint256 amountAToInvest, uint256 amountBToInvest) {
-        address fromToken = swapTokenA.path[0];
-        uint256 totalAmount = swapTokenA.amount + swapTokenB.amount;
-
-        if (fromToken == address(0)) {
-            if (msg.value == 0 || msg.value != totalAmount) revert InvalidInputAmount();
-
-            // subtract protocol fee
-            return (
-                amountAToInvest = msg.value - _subtractProtocolFee(ETHAddress, swapTokenA.amount, affiliate),
-                amountBToInvest = msg.value - _subtractProtocolFee(ETHAddress, swapTokenB.amount, affiliate)
-            );
-        }
-
-        if (totalAmount == 0 || msg.value > 0) revert InvalidInputAmount();
-
-        //transfer token to zap contract
-        TransferHelper.safeTransferFrom(fromToken, msg.sender, address(this), totalAmount);
-
-        // subtract protocol fee
-        return (
-            amountAToInvest = swapTokenA.amount - _subtractProtocolFee(fromToken, swapTokenA.amount, affiliate),
-            amountBToInvest = swapTokenB.amount - _subtractProtocolFee(fromToken, swapTokenB.amount, affiliate)
-        );
+    /** 
+    @notice 
+    */
+    function setFeeWhitelist(address zapAddress, bool status) external onlyOwner {
+        feeWhitelist[zapAddress] = status;
     }
 
-    function _subtractProtocolFee(
-        address token,
-        uint256 amount,
-        address affiliate
-    ) internal returns (uint256 totalProtocolFeePortion) {
-        bool whitelisted = feeWhitelist[msg.sender];
-        if (!whitelisted && protocolFee > 0) {
-            totalProtocolFeePortion = (amount * protocolFee) / 10000;
+    /** 
+    @notice 
+    */
+    function setNewAffiliateSplit(uint16 _newAffiliateSplit) external onlyOwner {
+        if (_newAffiliateSplit > 10000) revert ForbiddenValue();
+        affiliateSplit = _newAffiliateSplit;
+    }
 
-            if (affiliates[affiliate] && affiliateSplit > 0) {
-                uint256 affiliatePortion = (totalProtocolFeePortion * affiliateSplit) / 10000;
-                affiliateBalance[affiliate][token] = affiliateBalance[affiliate][token] + affiliatePortion;
-                totalAffiliateBalance[token] = totalAffiliateBalance[token] + affiliatePortion;
+    /** 
+    @notice 
+    */
+    function setAffiliateStatus(address _affiliate, bool _status) external onlyOwner {
+        affiliates[_affiliate] = _status;
+    }
+
+    /** 
+    @notice 
+    */
+    function setSupportedDEX(
+        uint8 _dexIndex,
+        string calldata _name,
+        address _router,
+        address _factory
+    ) external onlyOwner {
+        if (supportedDEXs[_dexIndex].router != address(0)) revert DexIndexAlreadyUsed();
+        if (_router == address(0) || _factory == address(0)) revert ZeroAddressInput();
+        if (_factory != IDXswapRouter(_router).factory()) revert InvalidRouterOrFactory();
+        supportedDEXs[_dexIndex] = DEX({name: _name, router: _router, factory: _factory});
+    }
+
+    /** 
+    @notice 
+    */
+    function removeSupportedDEX(uint8 _dexIndex) external onlyOwner {
+        supportedDEXs[_dexIndex].router = address(0);
+        supportedDEXs[_dexIndex].factory = address(0);
+        supportedDEXs[_dexIndex].name = '';
+    }
+
+    /** 
+    @notice 
+    */
+    function getSupportedDEX(uint8 _dexIndex) public view returns (address router, address factory) {
+        router = supportedDEXs[_dexIndex].router;
+        factory = supportedDEXs[_dexIndex].factory;
+        if (router == address(0) || factory == address(0)) revert InvalidRouterOrFactory();
+    }
+
+    /** 
+    @notice Sets the fee receiver address
+    @param _feeTo The address to send received zap fee 
+    */
+    function setFeeTo(address _feeTo) external {
+        if (msg.sender != feeToSetter) revert OnlyFeeSetter();
+        feeTo = _feeTo;
+    }
+
+    /** 
+    @param _feeToSetter The address of the fee setter
+    @notice Sets the setter address
+    */
+    function setFeeToSetter(address _feeToSetter) external {
+        if (msg.sender != feeToSetter) revert OnlyFeeSetter();
+        feeToSetter = _feeToSetter;
+    }
+
+    /**  
+    @notice Sets the protocol fee percent
+    @param _protocolFee The new protocol fee percent
+    */
+    function setProtocolFee(uint16 _protocolFee) external {
+        if (msg.sender != feeToSetter) revert OnlyFeeSetter();
+        if (_protocolFee > 10000) revert ForbiddenValue();
+        protocolFee = _protocolFee;
+    }
+
+    /** 
+    @notice Withdraw protocolFee share, retaining affilliate share 
+    */
+    function withdrawTokens(address[] calldata tokens) external onlyOwner {
+        for (uint256 i = 0; i < tokens.length; i++) {
+            uint256 qty;
+
+            if (tokens[i] == ETHAddress) {
+                qty = address(this).balance - totalAffiliateBalance[tokens[i]];
+                TransferHelper.safeTransferETH(owner, qty);
+            } else {
+                qty = IERC20(tokens[i]).balanceOf(address(this)) - totalAffiliateBalance[tokens[i]];
+                TransferHelper.safeTransfer(tokens[i], owner, qty);
             }
         }
     }
 
+    /**  
+    @notice Withdraw affilliate share
+    */
+    function affilliateWithdraw(address[] calldata tokens) external {
+        uint256 tokenBal;
+        for (uint256 i = 0; i < tokens.length; i++) {
+            tokenBal = affiliateBalance[msg.sender][tokens[i]];
+            affiliateBalance[msg.sender][tokens[i]] = 0;
+            totalAffiliateBalance[tokens[i]] = totalAffiliateBalance[tokens[i]] - tokenBal;
+
+            if (tokens[i] == ETHAddress) {
+                TransferHelper.safeTransferETH(msg.sender, tokenBal);
+            } else {
+                TransferHelper.safeTransfer(tokens[i], msg.sender, tokenBal);
+            }
+        }
+    }
+
+    /** 
+    @notice 
+    */
     function _performZapIn(
         uint256 amountAToInvest,
         uint256 amountBToInvest,
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB,
-        ZapTx calldata zap,
+        ZapInTx calldata zap,
         bool transferResidual
     ) internal returns (uint256 liquidity, address lpToken) {
         // check if dex is supported
@@ -259,13 +334,15 @@ contract Zap is Ownable, ReentrancyGuard {
         );
     }
 
+    /** 
+    @notice 
+    */
     function _performZapOut(
-        uint256 amountLpFrom,
+        ZapOutTx calldata zap,
         SwapTx calldata swapTokenA,
-        SwapTx calldata swapTokenB,
-        ZapTx calldata zap
+        SwapTx calldata swapTokenB
     ) internal returns (uint256 amountTo, address lpToken) {
-        if (amountLpFrom == 0) revert InvalidInputAmount();
+        if (zap.amountLpFrom == 0) revert InvalidInputAmount();
         // check if dex is supported
         (address router, address factory) = getSupportedDEX(zap.dexIndex);
         // validate pair
@@ -277,7 +354,7 @@ contract Zap is Ownable, ReentrancyGuard {
             token0,
             token1,
             lpToken,
-            amountLpFrom,
+            zap.amountLpFrom,
             swapTokenA.amountMin,
             swapTokenB.amountMin,
             router
@@ -291,6 +368,56 @@ contract Zap is Ownable, ReentrancyGuard {
         } else revert InvalidPair();
     }
 
+    /** 
+    @notice 
+    */
+    function _pullTokens(
+        SwapTx calldata swapTokenA,
+        SwapTx calldata swapTokenB,
+        address affiliate
+    ) internal returns (uint256 amountAToInvest, uint256 amountBToInvest) {
+        address fromTokenAddress = swapTokenA.path[0];
+        uint256 totalAmount = swapTokenA.amount + swapTokenB.amount;
+
+        if (fromTokenAddress == address(0)) {
+            if (msg.value == 0 || msg.value != totalAmount) revert InvalidInputAmount();
+            fromTokenAddress = ETHAddress;
+        } else {
+            if (msg.value > 0 || totalAmount == 0) revert InvalidInputAmount();
+            //transfer tokens to zap contract
+            TransferHelper.safeTransferFrom(fromTokenAddress, msg.sender, address(this), totalAmount);
+        }
+
+        // subtract protocol fee
+        return (
+            amountAToInvest = swapTokenA.amount - _subtractProtocolFee(fromTokenAddress, swapTokenA.amount, affiliate),
+            amountBToInvest = swapTokenB.amount - _subtractProtocolFee(fromTokenAddress, swapTokenB.amount, affiliate)
+        );
+    }
+
+    /** 
+    @notice 
+    */
+    function _subtractProtocolFee(
+        address token,
+        uint256 amount,
+        address affiliate
+    ) internal returns (uint256 totalProtocolFeePortion) {
+        bool whitelisted = feeWhitelist[msg.sender];
+        if (!whitelisted && protocolFee > 0) {
+            totalProtocolFeePortion = (amount * protocolFee) / 10000;
+
+            if (affiliates[affiliate] && affiliateSplit > 0) {
+                uint256 affiliatePortion = (totalProtocolFeePortion * affiliateSplit) / 10000;
+                affiliateBalance[affiliate][token] = affiliateBalance[affiliate][token] + affiliatePortion;
+                totalAffiliateBalance[token] = totalAffiliateBalance[token] + affiliatePortion;
+            }
+        }
+    }
+
+    /** 
+    @notice 
+    */
     function _buyTokens(
         uint256 amountAToInvest,
         uint256 amountBToInvest,
@@ -341,6 +468,61 @@ contract Zap is Ownable, ReentrancyGuard {
         );
     }
 
+    /**  
+    @notice Swaps exact tokenFrom following path
+    @param amountFrom The amount of tokenFrom to swap
+    @param amountToMin The min amount of tokenTo to receive
+    @param path The path to follow to swap tokenFrom to TokenTo
+    @param to The address that will receive tokenTo
+    @return amountTo The amount of token received
+    */
+    function _swapExactTokensForTokens(
+        uint256 amountFrom,
+        uint256 amountToMin,
+        address[] memory path,
+        address to,
+        address router
+    ) internal returns (uint256 amountTo) {
+        uint256 len = path.length;
+        address tokenTo = path[len - 1];
+        uint256 balanceBefore = IERC20(tokenTo).balanceOf(to);
+
+        // swap tokens following the path
+        if (len > 1) {
+            _approveTokenIfNeeded(path[0], amountFrom, router);
+            IDXswapRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(
+                amountFrom,
+                amountToMin,
+                path,
+                to,
+                deadline
+            );
+            amountTo = IERC20(tokenTo).balanceOf(to) - balanceBefore;
+        } else {
+            // no swap needed because path is only 1-element
+            if (to != address(this)) {
+                // transfer token to receiver address
+                TransferHelper.safeTransfer(tokenTo, to, amountFrom);
+                amountTo = IERC20(tokenTo).balanceOf(to) - balanceBefore;
+            } else {
+                // ZapIn case: token already on Zap contract balance
+                amountTo = amountFrom;
+            }
+        }
+        if (amountTo < amountToMin) revert InsufficientMinAmount();
+    }
+
+    /**  
+    @notice Add liquidity to the pool
+    @param tokenA The address of the first pool token
+    @param tokenB The address of the second pool token
+    @param amountADesired The desired amount of token A to add
+    @param amountBDesired The desired amount of token A to add
+    @param amountAMin The minimum amount of token A to receive
+    @param amountBMin The minimum amount of token A to receive
+    @param router The address of platform's router
+    @param transferResidual Set false to save gas by donating the residual remaining after a ZapTx
+    */
     function _addLiquidity(
         address tokenA,
         address tokenB,
@@ -385,168 +567,9 @@ contract Zap is Ownable, ReentrancyGuard {
         }
     }
 
-    /// @notice Swaps exact tokenFrom following path
-    /// @param amountFrom The amount of tokenFrom to swap
-    /// @param amountToMin The min amount of tokenTo to receive
-    /// @param path The path to follow to swap tokenFrom to TokenTo
-    /// @param to The address that will receive tokenTo
-    /// @return amountTo The amount of token received
-    function _swapExactTokensForTokens(
-        uint256 amountFrom,
-        uint256 amountToMin,
-        address[] memory path,
-        address to,
-        address router
-    ) internal returns (uint256 amountTo) {
-        uint256 len = path.length;
-        address tokenTo = path[len - 1];
-        uint256 balanceBefore = IERC20(tokenTo).balanceOf(to);
-
-        // swap tokens following the path
-        if (len > 1) {
-            _approveTokenIfNeeded(path[0], amountFrom, router);
-            IDXswapRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(
-                amountFrom,
-                amountToMin,
-                path,
-                to,
-                deadline
-            );
-            amountTo = IERC20(tokenTo).balanceOf(to) - balanceBefore;
-        } else {
-            // no swap needed because path is only 1-element
-            if (to != address(this)) {
-                // transfer token to receiver address
-                TransferHelper.safeTransfer(tokenTo, to, amountFrom);
-                amountTo = IERC20(tokenTo).balanceOf(to) - balanceBefore;
-            } else {
-                // ZapIn case: token already on ZapTx contract balance
-                amountTo = amountFrom;
-            }
-        }
-        if (amountTo < amountToMin) revert InsufficientMinAmount();
-    }
-
-    function setFeeWhitelist(address zapAddress, bool status) external onlyOwner {
-        feeWhitelist[zapAddress] = status;
-    }
-
-    function setNewAffiliateSplit(uint16 _newAffiliateSplit) external onlyOwner {
-        if (_newAffiliateSplit > 10000) revert ForbiddenValue();
-        affiliateSplit = _newAffiliateSplit;
-    }
-
-    function setAffiliateStatus(address _affiliate, bool _status) external onlyOwner {
-        affiliates[_affiliate] = _status;
-    }
-
-    function setSupportedDEX(
-        uint8 _dexIndex,
-        string calldata _name,
-        address _router,
-        address _factory
-    ) external onlyOwner {
-        if (supportedDEXs[_dexIndex].router != address(0)) revert DexIndexAlreadyUsed();
-        if (_router == address(0) || _factory == address(0)) revert ZeroAddressInput();
-        if (_factory != IDXswapRouter(_router).factory()) revert InvalidRouterOrFactory();
-        supportedDEXs[_dexIndex] = DEX({name: _name, router: _router, factory: _factory});
-    }
-
-    // TODO
-    function removeSupportedDEX(uint8 _dexIndex) external onlyOwner {
-        supportedDEXs[_dexIndex].router = address(0);
-        supportedDEXs[_dexIndex].factory = address(0);
-        supportedDEXs[_dexIndex].name = '';
-    }
-
-    function getSupportedDEX(uint8 _dexIndex) public view returns (address router, address factory) {
-        router = supportedDEXs[_dexIndex].router;
-        factory = supportedDEXs[_dexIndex].factory;
-        if (router == address(0) || factory == address(0)) revert InvalidRouterOrFactory();
-    }
-
-    /// @notice Sets the fee receiver address
-    /// @param _feeTo The address to send received zap fee
-    function setFeeTo(address _feeTo) external {
-        if (msg.sender != feeToSetter) revert OnlyFeeSetter();
-        feeTo = _feeTo;
-    }
-
-    /// @notice Sets the setter address
-    /// @param _feeToSetter The address of the fee setter
-    function setFeeToSetter(address _feeToSetter) external {
-        if (msg.sender != feeToSetter) revert OnlyFeeSetter();
-        feeToSetter = _feeToSetter;
-    }
-
-    /// @notice Sets the protocol fee percent
-    /// @param _protocolFee The new protocol fee percent
-    function setProtocolFee(uint16 _protocolFee) external {
-        if (msg.sender != feeToSetter) revert OnlyFeeSetter();
-        if (_protocolFee > 10000) revert ForbiddenValue();
-        protocolFee = _protocolFee;
-    }
-
-    ///@notice Withdraw protocolFee share, retaining affilliate share
-    function withdrawTokens(address[] calldata tokens) external onlyOwner {
-        for (uint256 i = 0; i < tokens.length; i++) {
-            uint256 qty;
-
-            if (tokens[i] == ETHAddress) {
-                qty = address(this).balance - totalAffiliateBalance[tokens[i]];
-                TransferHelper.safeTransferETH(owner, qty);
-            } else {
-                qty = IERC20(tokens[i]).balanceOf(address(this)) - totalAffiliateBalance[tokens[i]];
-                TransferHelper.safeTransfer(tokens[i], owner, qty);
-            }
-        }
-    }
-
-    ///@notice Withdraw affilliate share, retaining protocolFee share
-    function affilliateWithdraw(address[] calldata tokens) external {
-        uint256 tokenBal;
-        for (uint256 i = 0; i < tokens.length; i++) {
-            tokenBal = affiliateBalance[msg.sender][tokens[i]];
-            affiliateBalance[msg.sender][tokens[i]] = 0;
-            totalAffiliateBalance[tokens[i]] = totalAffiliateBalance[tokens[i]] - tokenBal;
-
-            if (tokens[i] == ETHAddress) {
-                TransferHelper.safeTransferETH(msg.sender, tokenBal);
-            } else {
-                TransferHelper.safeTransfer(tokens[i], msg.sender, tokenBal);
-            }
-        }
-    }
-
-    /// @notice Gets and validates pair's address
-    /// @param tokenA The addres of the first token of the pair
-    /// @param tokenB The addres of the second token of the pair
-    /// @return pair The address of the pair
-    function _getPairAddress(
-        address tokenA,
-        address tokenB,
-        address factory
-    ) internal view returns (address pair) {
-        pair = IDXswapFactory(factory).getPair(tokenA, tokenB);
-        if (pair == address(0)) revert InvalidPair();
-    }
-
-    /// @notice Approves the token if needed
-    /// @param token The address of the token
-    /// @param amount The amount of token to send
-    function _approveTokenIfNeeded(
-        address token,
-        uint256 amount,
-        address router
-    ) internal {
-        if (IERC20(token).allowance(address(this), router) < amount) {
-            // Note: some tokens (e.g. USDT, KNC) allowance must be first reset
-            // to 0 before being able to update it
-            TransferHelper.safeApprove(token, router, 0);
-            TransferHelper.safeApprove(token, router, amount);
-        }
-    }
-
+    /** 
+    @notice 
+    */
     function _removeLiquidity(
         address tokenA,
         address tokenB,
@@ -575,6 +598,27 @@ contract Zap is Ownable, ReentrancyGuard {
         if (amountA == 0 || amountB == 0) revert InsufficientMinAmount();
     }
 
+    /**  
+    @notice Approves the token if needed
+    @param token The address of the token
+    @param amount The amount of token to send
+    */
+    function _approveTokenIfNeeded(
+        address token,
+        uint256 amount,
+        address router
+    ) internal {
+        if (IERC20(token).allowance(address(this), router) < amount) {
+            // Note: some tokens (e.g. USDT, KNC) allowance must be first reset
+            // to 0 before being able to update it
+            TransferHelper.safeApprove(token, router, 0);
+            TransferHelper.safeApprove(token, router, amount);
+        }
+    }
+
+    /** 
+    @notice 
+    */
     function _getFeeAndTransferTokens(
         address tokenTo,
         uint256 amountTo,
@@ -582,7 +626,7 @@ contract Zap is Ownable, ReentrancyGuard {
         address affiliate
     ) internal returns (uint256 amountTransferred) {
         uint256 totalProtocolFeePortion;
-        // transfer toTokens to sender
+
         if (tokenTo == address(0)) {
             totalProtocolFeePortion = _subtractProtocolFee(ETHAddress, amountTo, affiliate);
             TransferHelper.safeTransferETH(to, amountTo - totalProtocolFeePortion);
@@ -594,6 +638,9 @@ contract Zap is Ownable, ReentrancyGuard {
         amountTransferred = amountTo - totalProtocolFeePortion;
     }
 
+    /** 
+    @notice 
+    */
     function _swapLpTokensToTargetTokens(
         uint256 amountA,
         uint256 amountB,
@@ -606,5 +653,20 @@ contract Zap is Ownable, ReentrancyGuard {
         amountTo =
             _swapExactTokensForTokens(amountA, swapTokenA.amountMin, swapTokenA.path, to, routerSwapA) +
             _swapExactTokensForTokens(amountB, swapTokenB.amountMin, swapTokenB.path, to, routerSwapB);
+    }
+
+    /** 
+    @notice Gets and validates pair's address
+    @param tokenA The addres of the first token of the pair
+    @param tokenB The addres of the second token of the pair
+    @return pair The address of the pair
+    */
+    function _getPairAddress(
+        address tokenA,
+        address tokenB,
+        address factory
+    ) internal view returns (address pair) {
+        pair = IDXswapFactory(factory).getPair(tokenA, tokenB);
+        if (pair == address(0)) revert InvalidPair();
     }
 }

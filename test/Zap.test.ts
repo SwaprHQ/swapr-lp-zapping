@@ -160,11 +160,9 @@ describe.only("Zap", function () {
 
       await expect(
       zap.connect(impersonated).zapOut(
-        amountIn, 0,
+        {amountLpFrom: 0, amountTokenToMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
         {amount: amountIn, amountMin: 0, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
         {amount: amountIn, amountMin: 0, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
-        impersonated.address,
         impersonated.address
         )
     ).to.be.revertedWith("InvalidTargetPath()")
@@ -196,17 +194,117 @@ describe.only("Zap", function () {
   })
 
 
-  describe("Token", function () {
-    it("zap in dxd token to dxd/weth and zap out to native currency: xdai", async function () {
-    zap.connect(impersonated).zapIn(
-      {amount: amountIn, amountMin: 0, path:[DXD.address] , dexIndex: dexIndex1}, 
-      {amount: amountIn, amountMin: 0, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
-      {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
-      impersonated.address, 
-      true,
-      {value: 0, gasLimit: 9999999}
+  describe.only("Zap In", function () {
+    it("zap in dxd token to dxd/weth", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const lpBalanceInit = await dxdWeth.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await DXD.balanceOf(impersonated.address)
+      
+      await DXD.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
+        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        impersonated.address, 
+        true,
+        {value: 0, gasLimit: 9999999}
       )
+      
+      const tokenInBalance = await DXD.balanceOf(impersonated.address)      
+      const lpBalance = await dxdWeth.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+      
+      expect(lpBought).to.be.above(0)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, DXD.address, totalAmount, dxdWeth.address, lpBought)
     })
+
+
+    it("zap in dxd token to gno/xdai", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const lpBalanceInit = await gnoXdai.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await DXD.balanceOf(impersonated.address)
+      
+      await DXD.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address, GNO.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WXDAI.address], dexIndex: dexIndex1}, 
+        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        impersonated.address, 
+        true,
+        {value: 0, gasLimit: 9999999}
+      )
+      
+      const tokenInBalance = await DXD.balanceOf(impersonated.address)      
+      const lpBalance = await gnoXdai.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+      
+      expect(lpBought).to.be.above(0)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, DXD.address, totalAmount, gnoXdai.address, lpBought)
+    })
+
+    it("zap in wxdai token to cow/weth", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const lpBalanceInit = await cowWeth.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await WXDAI.balanceOf(impersonated.address)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amount: totalAmount.div(2), amountMin: 0, path:[WXDAI.address, WETH.address, COW.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: 0, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        impersonated.address, 
+        true,
+        {value: 0, gasLimit: 9999999}
+      )
+      
+      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
+      const lpBalance = await cowWeth.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+      
+      expect(lpBought).to.be.above(0)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, WXDAI.address, totalAmount, cowWeth.address, lpBought)
+    })
+
+    it("zap in native currency (xdai) token to cow/weth", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const nativeCurrencyBalanceInit = await impersonated.getBalance()
+      expect(nativeCurrencyBalanceInit).to.be.above(0)
+      
+      const lpBalanceInit = await cowWeth.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await WXDAI.balanceOf(impersonated.address)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amount: totalAmount.div(2), amountMin: 0, path:[AddressZero, WETH.address, COW.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: 0, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
+        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        impersonated.address, 
+        true,
+        {value: totalAmount, gasLimit: 9999999}
+      )
+      
+      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
+      const lpBalance = await cowWeth.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+      const nativeCurrencyBalance = await impersonated.getBalance()
+      
+      expect(lpBought).to.be.above(0)
+      expect(nativeCurrencyBalanceInit).to.be.above(nativeCurrencyBalance)
+
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, AddressZero, totalAmount, cowWeth.address, lpBought)
+    })
+
   })
   
   // reset back to a fresh forked state
