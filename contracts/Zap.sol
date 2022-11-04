@@ -50,14 +50,16 @@ struct ZapOutTx {
     address to;
 }
 
-/// @title Zap
-/// @notice Allows to zapIn from an ERC20 or native currency to ERC20 pair
-/// and zapOut from an ERC20 pair to an ERC20 or native currency
-/// @dev Dusts from zap can be withdrawn by owner
+/**  
+@title Zap
+@notice Allows to zapIn from an ERC20 or native currency to ERC20 pair
+and zapOut from an ERC20 pair to an ERC20 or native currency
+@dev Dusts from zap can be withdrawn by owner
+*/
 contract Zap is Ownable, ReentrancyGuard {
     bool public stopped = false; // pause the contract if emergency
     uint16 public protocolFee = 50; // default 0.5% of zap amount protocol fee (range: 0-10000)
-    uint16 affiliateSplit; // % share of protocol fee (0-100 %) (range: 0-10000)
+    uint16 public affiliateSplit; // % share of protocol fee (0-100 %) (range: 0-10000)
     address public feeTo;
     address public feeToSetter;
     address public immutable nativeCurrencyWrapper;
@@ -73,24 +75,14 @@ contract Zap is Ownable, ReentrancyGuard {
     // token => amount
     mapping(address => uint256) public totalAffiliateBalance;
 
-    address private constant ETHAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    // native currency address used for balances
+    address private constant nativeCurrencyAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    // placeholder for swap deadline
     uint256 private constant deadline = 0xf000000000000000000000000000000000000000000000000000000000000000;
 
-    event ZapIn(
-        address indexed sender,
-        address indexed tokenFrom,
-        uint256 amountFrom,
-        address indexed pairTo,
-        uint256 amountTo
-    );
+    event ZapIn(address sender, address tokenFrom, uint256 amountFrom, address pairTo, uint256 amountTo);
 
-    event ZapOut(
-        address indexed sender,
-        address indexed pairFrom,
-        uint256 amountFrom,
-        address tokenTo,
-        uint256 amountTo
-    );
+    event ZapOut(address sender, address pairFrom, uint256 amountFrom, address tokenTo, uint256 amountTo);
 
     // circuit breaker modifiers
     modifier stopInEmergency() {
@@ -115,6 +107,10 @@ contract Zap is Ownable, ReentrancyGuard {
         feeToSetter = _feeToSetter;
         nativeCurrencyWrapper = _nativeCurrencyWrapper;
     }
+
+    /// @notice Allows the contract to receive native currency
+    /// @dev It is necessary to be able to receive native currency when using nativeCurrencyWrapper.withdraw()
+    receive() external payable {}
 
     /**
     @notice This function is used to invest in given Uniswap V2 pair through ETH/ERC20 Tokens
@@ -171,11 +167,6 @@ contract Zap is Ownable, ReentrancyGuard {
         emit ZapOut(msg.sender, lpToken, zap.amountLpFrom, tokenTo, amountTransferred);
     }
 
-    // - to pause the contract
-    function toggleContractActive() public onlyOwner {
-        stopped = !stopped;
-    }
-
     /** 
     @notice 
     */
@@ -223,15 +214,6 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
-    */
-    function getSupportedDEX(uint8 _dexIndex) public view returns (address router, address factory) {
-        router = supportedDEXs[_dexIndex].router;
-        factory = supportedDEXs[_dexIndex].factory;
-        if (router == address(0) || factory == address(0)) revert InvalidRouterOrFactory();
-    }
-
-    /** 
     @notice Sets the fee receiver address
     @param _feeTo The address to send received zap fee 
     */
@@ -266,7 +248,7 @@ contract Zap is Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < tokens.length; i++) {
             uint256 qty;
 
-            if (tokens[i] == ETHAddress) {
+            if (tokens[i] == nativeCurrencyAddress) {
                 qty = address(this).balance - totalAffiliateBalance[tokens[i]];
                 TransferHelper.safeTransferETH(owner, qty);
             } else {
@@ -286,12 +268,28 @@ contract Zap is Ownable, ReentrancyGuard {
             affiliateBalance[msg.sender][tokens[i]] = 0;
             totalAffiliateBalance[tokens[i]] = totalAffiliateBalance[tokens[i]] - tokenBal;
 
-            if (tokens[i] == ETHAddress) {
+            if (tokens[i] == nativeCurrencyAddress) {
                 TransferHelper.safeTransferETH(msg.sender, tokenBal);
             } else {
                 TransferHelper.safeTransfer(tokens[i], msg.sender, tokenBal);
             }
         }
+    }
+
+    /** 
+    @notice Pause the contract
+    */
+    function toggleContractActive() public onlyOwner {
+        stopped = !stopped;
+    }
+
+    /** 
+    @notice Check if DEX is supported and return addresses
+    */
+    function getSupportedDEX(uint8 _dexIndex) public view returns (address router, address factory) {
+        router = supportedDEXs[_dexIndex].router;
+        factory = supportedDEXs[_dexIndex].factory;
+        if (router == address(0) || factory == address(0)) revert InvalidRouterOrFactory();
     }
 
     /** 
@@ -381,7 +379,7 @@ contract Zap is Ownable, ReentrancyGuard {
 
         if (fromTokenAddress == address(0)) {
             if (msg.value == 0 || msg.value != totalAmount) revert InvalidInputAmount();
-            fromTokenAddress = ETHAddress;
+            fromTokenAddress = nativeCurrencyAddress;
         } else {
             if (msg.value > 0 || totalAmount == 0) revert InvalidInputAmount();
             //transfer tokens to zap contract
@@ -628,7 +626,9 @@ contract Zap is Ownable, ReentrancyGuard {
         uint256 totalProtocolFeePortion;
 
         if (tokenTo == address(0)) {
-            totalProtocolFeePortion = _subtractProtocolFee(ETHAddress, amountTo, affiliate);
+            // unwrap to native currency
+            IWETH(nativeCurrencyWrapper).withdraw(amountTo);
+            totalProtocolFeePortion = _subtractProtocolFee(nativeCurrencyAddress, amountTo, affiliate);
             TransferHelper.safeTransferETH(to, amountTo - totalProtocolFeePortion);
         } else {
             totalProtocolFeePortion = _subtractProtocolFee(tokenTo, amountTo, affiliate);
@@ -650,6 +650,20 @@ contract Zap is Ownable, ReentrancyGuard {
     ) internal returns (uint256 amountTo) {
         (address routerSwapA, ) = getSupportedDEX(swapTokenA.dexIndex);
         (address routerSwapB, ) = getSupportedDEX(swapTokenB.dexIndex);
+
+        if (swapTokenA.path[swapTokenA.path.length - 1] == address(0)) {
+            // set target token for native currency wrapper instead of address(0x00)
+            address[] memory pathA = swapTokenA.path;
+            address[] memory pathB = swapTokenB.path;
+            pathA[pathA.length - 1] = nativeCurrencyWrapper;
+            pathB[pathB.length - 1] = nativeCurrencyWrapper;
+
+            return
+                amountTo =
+                    _swapExactTokensForTokens(amountA, swapTokenA.amountMin, pathA, to, routerSwapA) +
+                    _swapExactTokensForTokens(amountB, swapTokenB.amountMin, pathB, to, routerSwapB);
+        }
+
         amountTo =
             _swapExactTokensForTokens(amountA, swapTokenA.amountMin, swapTokenA.path, to, routerSwapA) +
             _swapExactTokensForTokens(amountB, swapTokenB.amountMin, swapTokenB.path, to, routerSwapB);
