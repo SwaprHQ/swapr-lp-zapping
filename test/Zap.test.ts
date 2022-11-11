@@ -48,6 +48,8 @@ describe.only("Zap", function () {
   let dxdWeth: DXswapPair
   let cowWeth: DXswapPair
 
+  let wethGnoDex3: DXswapPair
+
   // wallets
   let owner: SignerWithAddress
   let user: SignerWithAddress
@@ -89,6 +91,9 @@ describe.only("Zap", function () {
     gnoDxd = fixture.gnoDxd
     dxdWeth = fixture.dxdWeth
     cowWeth = fixture.cowWeth
+
+    wethGnoDex3 = fixture.wethGnoDex3
+
     FEE_TO_SETTER = fixture.FEE_TO_SETTER
   })
 
@@ -578,15 +583,9 @@ describe.only("Zap", function () {
         overrides
       )
       
-      const { ethSpendForTx, eventArgValue: eventAmountTo} = await getTxData(txZapOut, "amountTo")
-
+      const { ethSpendForTx, amountTo: eventAmountTo} = await getTxData(txZapOut, "ZapOut")
       
       const nativeCurrencyBalanceAfterZapOut = await impersonated.getBalance()   
-      console.log('after', nativeCurrencyBalanceAfterZapOut)
-      console.log('befor', nativeCurrencyBalanceBeforeZapOut)
-      console.log('amoun', eventAmountTo)
-      console.log('spend', ethSpendForTx)
-      // expect(nativeCurrencyBalanceAfterZapOut).to.be.eq(nativeCurrencyBalanceBeforeZapOut.sub(ethSpendForTx).add(eventAmountTo))
       expect(nativeCurrencyBalanceAfterZapOut).to.be.above(nativeCurrencyBalanceBeforeZapOut)
       
       lpBalance = await cowWeth.balanceOf(impersonated.address)
@@ -633,16 +632,10 @@ describe.only("Zap", function () {
         overrides
       )
       
-      const { ethSpendForTx, eventArgValue: eventAmountTo} = await getTxData(txZapOut, "amountTo")
+      const { ethSpendForTx, amountTo: eventAmountTo} = await getTxData(txZapOut, "ZapOut")
 
       
       const nativeCurrencyBalanceAfterZapOut = await impersonated.getBalance()   
-      console.log('initt', nativeCurrencyBalanceInit)
-      console.log('befor', nativeCurrencyBalanceBeforeZapOut)
-      console.log('after', nativeCurrencyBalanceAfterZapOut)
-      console.log('amoun', eventAmountTo)
-      console.log('spend', ethSpendForTx)
-      // expect(nativeCurrencyBalanceAfterZapOut).to.be.eq(nativeCurrencyBalanceBeforeZapOut.sub(ethSpendForTx).add(eventAmountTo))
       expect(nativeCurrencyBalanceAfterZapOut).to.be.above(nativeCurrencyBalanceBeforeZapOut)
       
       lpBalance = await cowWeth.balanceOf(impersonated.address)
@@ -689,13 +682,12 @@ describe.only("Zap", function () {
         overrides
         )
         
-      const { ethSpendForTx, eventArgValue: eventAmountTo} = await getTxData(txZapOut, "amountTo")
+      const { ethSpendForTx, amountTo: eventAmountTo} = await getTxData(txZapOut, "ZapOut")
         
         
       const tokenOutBalanceAfterZapOut = await WXDAI.balanceOf(impersonated.address)
       const nativeCurrencyBalanceAfterZapOut = await impersonated.getBalance()   
 
-      // expect(nativeCurrencyBalanceAfterZapOut).to.be.eq(nativeCurrencyBalanceBeforeZapOut.sub(ethSpendForTx).add(eventAmountTo))
       expect(nativeCurrencyBalanceAfterZapOut).to.be.below(nativeCurrencyBalanceInit)
       expect(eventAmountTo).to.be.eq(tokenOutBalanceAfterZapOut.sub(tokenOutBalanceBeforeZapOut))
       
@@ -703,6 +695,93 @@ describe.only("Zap", function () {
       expect(lpBalance).to.be.eq(lpBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
       .withArgs(impersonated.address, cowWeth.address, lpBought, WXDAI.address, eventAmountTo)
+    })
+  })
+
+  describe("Zap with different DEXs", function () {
+    it("zap in dxd token to dxd/weth", async function () {
+      const amountA = ethers.utils.parseEther("1")
+      const amountB = ethers.utils.parseEther("13")
+      const totalAmount = amountA.add(amountB)
+      const lpBalanceInit = await wethGnoDex3.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await WXDAI.balanceOf(impersonated.address)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amount: amountA, amountMin: 0, path:[WXDAI.address, WETH.address] , dexIndex: dexIndex2}, 
+        {amount: amountB, amountMin: 0, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
+        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
+        impersonated.address, 
+        true,
+        {value: 0, gasLimit: 9999999}
+      )
+      
+      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
+      let lpBalance = await wethGnoDex3.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+
+      const { amountTo } = await getTxData(txZapIn, "ZapIn")
+      
+      expect(lpBought).to.be.above(0)
+      expect(lpBought).to.be.eq(amountTo)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, WXDAI.address, totalAmount, wethGnoDex3.address, lpBought)
+    })
+
+    it("zap in wxdai token to cow/weth and zap out to cow", async function () {
+      const amountA = ethers.utils.parseEther("1")
+      const amountB = ethers.utils.parseEther("13")
+      const totalAmount = amountA.add(amountB)
+      const lpBalanceInit = await wethGnoDex3.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await WXDAI.balanceOf(impersonated.address)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amount: amountA, amountMin: 0, path:[WXDAI.address, WETH.address] , dexIndex: dexIndex2}, 
+        {amount: amountB, amountMin: 0, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
+        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
+        impersonated.address, 
+        true,
+        {value: 0, gasLimit: 9999999}
+      )
+      
+      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
+      let lpBalance = await wethGnoDex3.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+
+      const { amountTo } = await getTxData(txZapIn, "ZapIn")
+      
+      expect(lpBought).to.be.above(0)
+      expect(lpBought).to.be.eq(amountTo)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, WXDAI.address, totalAmount, wethGnoDex3.address, lpBought)
+
+
+      const tokenBalanceBeforeZapOut = await COW.balanceOf(impersonated.address)
+
+      await wethGnoDex3.connect(impersonated).approve(zap.address, lpBought)
+      const txZapOut = await zap.connect(impersonated).zapOut(
+        {amountLpFrom: lpBought, amountTokenToMin: 0, dexIndex: dexIndex3, to: impersonated.address},
+        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [WETH.address, COW.address] },
+        {amount: 0, amountMin: 0, dexIndex: dexIndex3, path: [GNO.address, COW.address] },
+        impersonated.address,
+        overrides
+      )
+      
+      const { amountTo: eventAmountTo} = await getTxData(txZapOut, "ZapOut")
+
+      
+      const tokenBalanceAfterZapOut = await COW.balanceOf(impersonated.address)
+      expect(tokenBalanceAfterZapOut).to.be.above(tokenBalanceBeforeZapOut)
+      
+      lpBalance = await wethGnoDex3.balanceOf(impersonated.address)
+      expect(lpBalance).to.be.eq(lpBalanceInit)
+      await expect(txZapOut).to.emit(zap, "ZapOut")
+      .withArgs(impersonated.address, wethGnoDex3.address, lpBought, COW.address, eventAmountTo)
     })
   })
   
@@ -729,10 +808,15 @@ const getAmountOut = async (tokenIn: string, pair: DXswapPair) => {
   return reserveOut.mul(amountIn).div(reserveIn.add(amountIn))
 }
 
-const getTxData = async (tx: ContractTransaction, eventArg: string): Promise<{ethSpendForTx: BigNumber; eventArgValue: BigNumber}> => {
+const getTxData = async (tx: ContractTransaction, zapType: string): Promise<{ethSpendForTx: BigNumber; sender: string, tokenFrom: string, amountFrom: BigNumber, tokenTo: string, amountTo: BigNumber}> => {
   const txReceipt = await tx.wait();
-  const event = txReceipt.events && txReceipt.events.find(e => e.event === 'ZapOut');
-  const eventArgValue = BigNumber.from( event?.args && event?.args[eventArg])
+  // console.log(txReceipt.events)
+  const event = txReceipt.events && txReceipt.events.find(e => e.event === zapType);
   const ethSpendForTx = txReceipt.gasUsed.mul(txReceipt.effectiveGasPrice)
-  return { ethSpendForTx, eventArgValue }
+  const sender = event?.args && event?.args["sender"]
+  const tokenFrom = event?.args && event?.args[zapType === 'ZapOut' ? "pairFrom" : "tokenFrom"]
+  const amountFrom = BigNumber.from( event?.args && event?.args["amountFrom"])
+  const tokenTo = event?.args && event?.args[zapType === 'ZapOut' ? "tokenTo" : "pairTo"]
+  const amountTo = BigNumber.from( event?.args && event?.args["amountTo"])
+  return { ethSpendForTx, sender, tokenFrom, amountFrom, tokenTo, amountTo }
 }
