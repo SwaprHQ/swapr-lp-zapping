@@ -17,11 +17,11 @@ const deploymentConfig: { [k:string]: ZapDeploymentParams} = {
         feeToSetter: "0x288879b3CaFA044dB6Ba18ee638BBC1a233F8548",
     },
     gnosis: {
-        owner: "0x372A291A9cad69b0F5F231cf1885574e9De7fD33",
+        owner: "0xe716EC63C5673B3a4732D22909b38d779fa47c3F",
         factory: "0x5D48C95AdfFD4B40c1AAADc4e08fc44117E02179",
         router: "0xE43e60736b1cb4a75ad25240E2f9a62Bff65c0C0",
         nativeCurrencyWrapper: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
-        feeToSetter: "0x372A291A9cad69b0F5F231cf1885574e9De7fD33",
+        feeToSetter: "0xe3f8f55d7709770a18a30b7e0d16ae203a2c034f",
     },
     rinkeby: {
         owner: "",
