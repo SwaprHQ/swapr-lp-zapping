@@ -7,9 +7,8 @@ import {IERC20} from '@swapr/core/contracts/interfaces/IERC20.sol';
 import {IWETH} from '@swapr/core/contracts/interfaces/IWETH.sol';
 import {IDXswapRouter} from '@swapr/periphery/contracts/interfaces/IDXswapRouter.sol';
 import {TransferHelper} from '@swapr/periphery/contracts/libraries/TransferHelper.sol';
-import '@openzeppelin/contracts/security/ReentrancyGuard.sol';
-import '@openzeppelin/contracts/utils/math/Math.sol';
-import './peripherals/Ownable.sol';
+import {ReentrancyGuard} from '@openzeppelin/contracts/security/ReentrancyGuard.sol';
+import {Ownable} from './peripherals/Ownable.sol';
 
 error ForbiddenValue();
 error InsufficientMinAmount();
@@ -40,14 +39,12 @@ struct ZapInTx {
     uint256 amountBMin;
     uint256 amountLPMin;
     uint8 dexIndex;
-    address to;
 }
 
 struct ZapOutTx {
     uint256 amountLpFrom;
     uint256 amountTokenToMin;
     uint8 dexIndex;
-    address to;
 }
 
 /**  
@@ -80,9 +77,23 @@ contract Zap is Ownable, ReentrancyGuard {
     // placeholder for swap deadline
     uint256 private constant deadline = 0xf000000000000000000000000000000000000000000000000000000000000000;
 
-    event ZapIn(address sender, address tokenFrom, uint256 amountFrom, address pairTo, uint256 amountTo);
+    event ZapIn(
+        address sender,
+        address receiver,
+        address tokenFrom,
+        uint256 amountFrom,
+        address pairTo,
+        uint256 amountTo
+    );
 
-    event ZapOut(address sender, address pairFrom, uint256 amountFrom, address tokenTo, uint256 amountTo);
+    event ZapOut(
+        address sender,
+        address receiver,
+        address pairFrom,
+        uint256 amountFrom,
+        address tokenTo,
+        uint256 amountTo
+    );
 
     // circuit breaker modifiers
     modifier stopInEmergency() {
@@ -118,9 +129,10 @@ contract Zap is Ownable, ReentrancyGuard {
     @param transferResidual Set false to save gas by donating the residual remaining after a ZapTx
      */
     function zapIn(
+        ZapInTx calldata zap,
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB,
-        ZapInTx calldata zap,
+        address receiver,
         address affiliate,
         bool transferResidual
     ) external payable nonReentrant stopInEmergency returns (uint256 lpBought, address lpToken) {
@@ -138,9 +150,9 @@ contract Zap is Ownable, ReentrancyGuard {
         );
 
         if (lpBought < zap.amountLPMin) revert InsufficientMinAmount();
-        TransferHelper.safeTransfer(lpToken, msg.sender, lpBought);
+        TransferHelper.safeTransfer(lpToken, receiver, lpBought);
 
-        emit ZapIn(msg.sender, swapTokenA.path[0], swapTokenA.amount + swapTokenB.amount, lpToken, lpBought);
+        emit ZapIn(msg.sender, receiver, swapTokenA.path[0], swapTokenA.amount + swapTokenB.amount, lpToken, lpBought);
     }
 
     /**
@@ -152,6 +164,7 @@ contract Zap is Ownable, ReentrancyGuard {
         ZapOutTx calldata zap,
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB,
+        address receiver,
         address affiliate
     ) external nonReentrant stopInEmergency returns (uint256 amountTransferred, address tokenTo) {
         // check if target token is the same for both paths
@@ -161,10 +174,10 @@ contract Zap is Ownable, ReentrancyGuard {
 
         (uint256 amountTo, address lpToken) = _performZapOut(zap, swapTokenA, swapTokenB);
 
-        amountTransferred = _getFeeAndTransferTokens(tokenTo, amountTo, zap.to, affiliate);
+        amountTransferred = _getFeeAndTransferTokens(tokenTo, amountTo, receiver, affiliate);
         if (amountTransferred < zap.amountTokenToMin) revert InsufficientMinAmount();
 
-        emit ZapOut(msg.sender, lpToken, zap.amountLpFrom, tokenTo, amountTransferred);
+        emit ZapOut(msg.sender, receiver, lpToken, zap.amountLpFrom, tokenTo, amountTransferred);
     }
 
     /** 
@@ -284,7 +297,8 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice Check if DEX is supported and return addresses
+    @notice Check if DEX's address is valid and supported
+    @return router factory DEX's router and factory addresses
     */
     function getSupportedDEX(uint8 _dexIndex) public view returns (address router, address factory) {
         router = supportedDEXs[_dexIndex].router;
@@ -303,14 +317,12 @@ contract Zap is Ownable, ReentrancyGuard {
         ZapInTx calldata zap,
         bool transferResidual
     ) internal returns (uint256 liquidity, address lpToken) {
-        // check if dex is supported
+        // check if dex address is valid and supported
         (address router, address factory) = getSupportedDEX(zap.dexIndex);
 
-        // get pair and check if exists
-        lpToken = _getPairAddress(
+        lpToken = IDXswapFactory(factory).getPair(
             swapTokenA.path[swapTokenA.path.length - 1],
-            swapTokenB.path[swapTokenB.path.length - 1],
-            factory
+            swapTokenB.path[swapTokenB.path.length - 1]
         );
 
         (uint256 tokenABought, uint256 tokenBBought) = _buyTokens(
@@ -341,29 +353,25 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenB
     ) internal returns (uint256 amountTo, address lpToken) {
         if (zap.amountLpFrom == 0) revert InvalidInputAmount();
-        // check if dex is supported
+        // check if dex address is valid and supported
         (address router, address factory) = getSupportedDEX(zap.dexIndex);
-        // validate pair
-        lpToken = _getPairAddress(swapTokenA.path[0], swapTokenB.path[0], factory);
-        address token0 = IDXswapPair(lpToken).token0();
-        address token1 = IDXswapPair(lpToken).token1();
 
-        (uint256 amount0, uint256 amount1) = _removeLiquidity(
-            token0,
-            token1,
-            lpToken,
+        lpToken = _pullLpTokens(zap.amountLpFrom, swapTokenA.path[0], swapTokenB.path[0], router, factory);
+
+        // router.removeLiquidity() sorts tokens so no need to set them in exact order
+        (uint256 amountA, uint256 amountB) = IDXswapRouter(router).removeLiquidity(
+            swapTokenA.path[0],
+            swapTokenB.path[0],
             zap.amountLpFrom,
             swapTokenA.amountMin,
             swapTokenB.amountMin,
-            router
+            address(this),
+            deadline
         );
 
-        //swaps tokens to target token through proper path
-        if (swapTokenA.path[0] == token0 && swapTokenB.path[0] == token1) {
-            amountTo = _swapLpTokensToTargetTokens(amount0, amount1, swapTokenA, swapTokenB, address(this));
-        } else if (swapTokenA.path[0] == token1 && swapTokenB.path[0] == token0) {
-            amountTo = _swapLpTokensToTargetTokens(amount1, amount0, swapTokenA, swapTokenB, address(this));
-        } else revert InvalidPair();
+        if (amountA == 0 || amountB == 0) revert InsufficientMinAmount();
+
+        amountTo = _swapLpTokensToTargetTokens(amountA, amountB, swapTokenA, swapTokenB, address(this));
     }
 
     /** 
@@ -391,6 +399,23 @@ contract Zap is Ownable, ReentrancyGuard {
             amountAToInvest = swapTokenA.amount - _subtractProtocolFee(fromTokenAddress, swapTokenA.amount, affiliate),
             amountBToInvest = swapTokenB.amount - _subtractProtocolFee(fromTokenAddress, swapTokenB.amount, affiliate)
         );
+    }
+
+    function _pullLpTokens(
+        uint256 amount,
+        address tokenA,
+        address tokenB,
+        address router,
+        address factory
+    ) internal returns (address lpToken) {
+        // validate pair
+        lpToken = IDXswapFactory(factory).getPair(tokenA, tokenB);
+        if (lpToken == address(0)) revert InvalidPair();
+
+        _approveTokenIfNeeded(lpToken, amount, router);
+
+        // pull LP tokens from sender
+        TransferHelper.safeTransferFrom(lpToken, msg.sender, address(this), amount);
     }
 
     /** 
@@ -422,6 +447,9 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB
     ) internal returns (uint256 tokenABought, uint256 tokenBBought) {
+        //
+        (address routerSwapA, ) = getSupportedDEX(swapTokenA.dexIndex);
+        (address routerSwapB, ) = getSupportedDEX(swapTokenB.dexIndex);
         // wrap native currency
         if (swapTokenA.path[0] == address(0)) {
             address[] memory pathA = swapTokenA.path;
@@ -437,14 +465,14 @@ contract Zap is Ownable, ReentrancyGuard {
                 swapTokenA.amountMin,
                 pathA,
                 address(this),
-                supportedDEXs[swapTokenA.dexIndex].router
+                routerSwapA
             );
             tokenBBought = _swapExactTokensForTokens(
                 amountBToInvest,
                 swapTokenB.amountMin,
                 pathB,
                 address(this),
-                supportedDEXs[swapTokenB.dexIndex].router
+                routerSwapB
             );
 
             return (tokenABought, tokenBBought);
@@ -455,14 +483,14 @@ contract Zap is Ownable, ReentrancyGuard {
             swapTokenA.amountMin,
             swapTokenA.path,
             address(this),
-            supportedDEXs[swapTokenA.dexIndex].router
+            routerSwapA
         );
         tokenBBought = _swapExactTokensForTokens(
             amountBToInvest,
             swapTokenB.amountMin,
             swapTokenB.path,
             address(this),
-            supportedDEXs[swapTokenB.dexIndex].router
+            routerSwapB
         );
     }
 
@@ -553,47 +581,16 @@ contract Zap is Ownable, ReentrancyGuard {
         );
 
         if (transferResidual) {
-            // returning residue in token0, if any
+            // returning residue in tokenA, if any
             if (amountADesired - amountA > 0) {
                 TransferHelper.safeTransfer(tokenA, msg.sender, (amountADesired - amountA));
             }
 
-            // returning residue in token1, if any
+            // returning residue in tokenB, if any
             if (amountBDesired - amountB > 0) {
                 TransferHelper.safeTransfer(tokenB, msg.sender, (amountBDesired - amountB));
             }
         }
-    }
-
-    /** 
-    @notice 
-    */
-    function _removeLiquidity(
-        address tokenA,
-        address tokenB,
-        address lpToken,
-        uint256 amountLp,
-        uint256 amountAMin,
-        uint256 amountBMin,
-        address router
-    ) internal returns (uint256 amountA, uint256 amountB) {
-        _approveTokenIfNeeded(lpToken, amountLp, router);
-
-        // pull LP tokens from sender
-        TransferHelper.safeTransferFrom(lpToken, msg.sender, address(this), amountLp);
-
-        // removeLiquidity sort tokens so no need to set them in exact order
-        (amountA, amountB) = IDXswapRouter(router).removeLiquidity(
-            tokenA,
-            tokenB,
-            amountLp,
-            amountAMin,
-            amountBMin,
-            address(this),
-            deadline
-        );
-
-        if (amountA == 0 || amountB == 0) revert InsufficientMinAmount();
     }
 
     /**  
@@ -667,20 +664,5 @@ contract Zap is Ownable, ReentrancyGuard {
         amountTo =
             _swapExactTokensForTokens(amountA, swapTokenA.amountMin, swapTokenA.path, to, routerSwapA) +
             _swapExactTokensForTokens(amountB, swapTokenB.amountMin, swapTokenB.path, to, routerSwapB);
-    }
-
-    /** 
-    @notice Gets and validates pair's address
-    @param tokenA The addres of the first token of the pair
-    @param tokenB The addres of the second token of the pair
-    @return pair The address of the pair
-    */
-    function _getPairAddress(
-        address tokenA,
-        address tokenB,
-        address factory
-    ) internal view returns (address pair) {
-        pair = IDXswapFactory(factory).getPair(tokenA, tokenB);
-        if (pair == address(0)) revert InvalidPair();
     }
 }

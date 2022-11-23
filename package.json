@@ -55,7 +55,8 @@
     "test:gasreport": "GAS_REPORT_ENABLED=true hardhat test",
     "prepublishOnly": "yarn test",
     "build-package": "ts-node scripts/bundler.ts",
-    "deploy-test:goerli": "hardhat deploy --network goerli --tags Zap",
+    "deploy:gnosis": "hardhat deploy --network gnosis --tags Zap",
+    "deploy:goerli": "hardhat deploy --network goerli --tags Zap",
     "verify:goerli": "set -a; . ./.env; set +a; npx hardhat --network goerli etherscan-verify --api-key \"$ETHERSCAN_API_KEY\"",
     "size-contracts": "hardhat size-contracts"
   }

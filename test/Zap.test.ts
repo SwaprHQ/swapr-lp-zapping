@@ -10,6 +10,7 @@ import { calculateAmountsOut } from "./shared/utilities"
 
 const amountIn = ethers.utils.parseEther("1")
 const { AddressZero, MaxUint256 } = constants
+const dexIndex0 = BigNumber.from(0)
 const dexIndex1 = BigNumber.from(1)
 const dexIndex2 = BigNumber.from(2)
 const dexIndex3 = BigNumber.from(3)
@@ -20,6 +21,7 @@ const overrides = {
 
 // Using a Round error exception of 0.00000000000001 in ETH Unit, this equals 10000 in WEI unit, same value used as denominator for swap fee calculation 
 const ROUND_EXCEPTION = BigNumber.from(10).pow(4)
+const zeroBN = BigNumber.from(0)
 
 const USER_ACCOUNT = "0xe716EC63C5673B3a4732D22909b38d779fa47c3F" //dao avatar as example user
 
@@ -125,9 +127,10 @@ describe.only("Zap", function () {
 
       await expect(
         zap.connect(impersonated).zapIn(
-          {amount: 0, amountMin: 0, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
-          {amount: 0, amountMin: 0, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
-          {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
+          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3}, 
+          {amount: zeroBN, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
+          {amount: zeroBN, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+          impersonated.address,
           impersonated.address, 
           true
           )
@@ -135,20 +138,22 @@ describe.only("Zap", function () {
           
       await expect(
         zap.connect(impersonated).zapIn(
-          {amount: 0, amountMin: 0, path:[AddressZero, GNO.address] , dexIndex: dexIndex1}, 
-          {amount: 0, amountMin: 0, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
-          {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
+          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3}, 
+          {amount: zeroBN, amountMin: zeroBN, path:[AddressZero, GNO.address] , dexIndex: dexIndex1}, 
+          {amount: zeroBN, amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
+          impersonated.address, 
           impersonated.address, 
           true,
-          {value: 0, gasLimit: 9999999}
+          {value: zeroBN, gasLimit: 9999999}
           )
       ).to.be.revertedWith("InvalidInputAmount()")
 
       await expect(
         zap.connect(impersonated).zapIn(
-          {amount: amountIn, amountMin: 0, path:[COW.address, GNO.address] , dexIndex: dexIndex1}, 
-          {amount: amountIn, amountMin: 0, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
-          {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
+          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3}, 
+          {amount: amountIn, amountMin: zeroBN, path:[COW.address, GNO.address] , dexIndex: dexIndex1}, 
+          {amount: amountIn, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+          impersonated.address,
           impersonated.address, 
           true
           )
@@ -156,9 +161,10 @@ describe.only("Zap", function () {
 
       await expect(
       zap.connect(impersonated).zapOut(
-        {amountLpFrom: 0, amountTokenToMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
-        {amount: amountIn, amountMin: 0, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
-        {amount: amountIn, amountMin: 0, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+        {amountLpFrom: zeroBN, amountTokenToMin: zeroBN, dexIndex: dexIndex3}, 
+        {amount: amountIn, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
+        {amount: amountIn, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address,
         impersonated.address
         )
     ).to.be.revertedWith("InvalidTargetPath()")
@@ -263,12 +269,13 @@ describe.only("Zap", function () {
       
       await DXD.connect(impersonated).approve(zap.address, totalAmount)
       await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
+        randomSigner.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const zapTokenBalance = await DXD.balanceOf(zap.address)
@@ -288,12 +295,13 @@ describe.only("Zap", function () {
       
       await DXD.connect(impersonated).approve(zap.address, totalAmount)
       await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       let zapTokenBalance = await DXD.balanceOf(zap.address)
@@ -318,12 +326,13 @@ describe.only("Zap", function () {
       
       await DXD.connect(impersonated).approve(zap.address, totalAmount)
       await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address] , dexIndex: dexIndex1}, 
+        impersonated.address, 
         randomSigner.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const zapTokenBalance = await DXD.balanceOf(zap.address)
@@ -346,12 +355,13 @@ describe.only("Zap", function () {
       
       await DXD.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const tokenInBalance = await DXD.balanceOf(impersonated.address)      
@@ -362,9 +372,8 @@ describe.only("Zap", function () {
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, DXD.address, totalAmount, dxdWeth.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,DXD.address, totalAmount, dxdWeth.address, lpBought)
     })
-
 
     it("zap in dxd token to gno/xdai", async function () {
       const totalAmount = ethers.utils.parseEther("1")
@@ -373,12 +382,13 @@ describe.only("Zap", function () {
       
       await DXD.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address, GNO.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WXDAI.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address, GNO.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WXDAI.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const tokenInBalance = await DXD.balanceOf(impersonated.address)      
@@ -389,7 +399,7 @@ describe.only("Zap", function () {
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, DXD.address, totalAmount, gnoXdai.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,DXD.address, totalAmount, gnoXdai.address, lpBought)
     })
 
     it("zap in wxdai token to cow/weth", async function () {
@@ -399,12 +409,13 @@ describe.only("Zap", function () {
       
       await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[WXDAI.address, WETH.address, COW.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[WXDAI.address, WETH.address, COW.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
@@ -415,7 +426,7 @@ describe.only("Zap", function () {
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, WXDAI.address, totalAmount, cowWeth.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,WXDAI.address, totalAmount, cowWeth.address, lpBought)
     })
 
     it("zap in native currency (xdai) token to cow/weth", async function () {
@@ -428,9 +439,10 @@ describe.only("Zap", function () {
       
       await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[AddressZero, WETH.address, COW.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[AddressZero, WETH.address, COW.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
         {value: totalAmount, gasLimit: 9999999}
@@ -446,7 +458,7 @@ describe.only("Zap", function () {
 
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, AddressZero, totalAmount, cowWeth.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,AddressZero, totalAmount, cowWeth.address, lpBought)
     })
 
   })
@@ -459,12 +471,13 @@ describe.only("Zap", function () {
       
       await DXD.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address] , dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const tokenInBalance = await DXD.balanceOf(impersonated.address)      
@@ -475,15 +488,16 @@ describe.only("Zap", function () {
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, DXD.address, totalAmount, dxdWeth.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,DXD.address, totalAmount, dxdWeth.address, lpBought)
       
       const tokenOutBalanceInit = await WXDAI.balanceOf(impersonated.address) 
 
       await dxdWeth.connect(impersonated).approve(zap.address, lpBought)
       const txZapOut = await zap.connect(impersonated).zapOut(
-        {amountLpFrom: lpBought, amountTokenToMin: 0, dexIndex: dexIndex1, to: impersonated.address},
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [DXD.address, WXDAI.address] },
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [WETH.address, WXDAI.address] },
+        {amountLpFrom: lpBought, amountTokenToMin: zeroBN, dexIndex: dexIndex1},
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [DXD.address, WXDAI.address] },
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [WETH.address, WXDAI.address] },
+        impersonated.address,
         impersonated.address,
         overrides
       )
@@ -495,7 +509,7 @@ describe.only("Zap", function () {
 
       expect(tokenOutBalance).to.be.above(tokenOutBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
-      .withArgs(impersonated.address, dxdWeth.address, lpBought, WXDAI.address, tokenOutBalance.sub(tokenOutBalanceInit))
+      .withArgs(impersonated.address, impersonated.address,dxdWeth.address, lpBought, WXDAI.address, tokenOutBalance.sub(tokenOutBalanceInit))
 
     })
 
@@ -507,12 +521,13 @@ describe.only("Zap", function () {
       
       await DXD.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[DXD.address, GNO.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [DXD.address, WXDAI.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address, GNO.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WXDAI.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const tokenInBalance = await DXD.balanceOf(impersonated.address)      
@@ -523,15 +538,16 @@ describe.only("Zap", function () {
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, DXD.address, totalAmount, gnoXdai.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,DXD.address, totalAmount, gnoXdai.address, lpBought)
 
       const tokenOutBalanceInit = await WXDAI.balanceOf(impersonated.address) 
 
       await gnoXdai.connect(impersonated).approve(zap.address, lpBought)
       const txZapOut = await zap.connect(impersonated).zapOut(
-        {amountLpFrom: lpBought, amountTokenToMin: 0, dexIndex: dexIndex1, to: impersonated.address},
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [WXDAI.address] },
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [GNO.address, WXDAI.address] },
+        {amountLpFrom: lpBought, amountTokenToMin: zeroBN, dexIndex: dexIndex1},
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [WXDAI.address] },
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [GNO.address, WXDAI.address] },
+        impersonated.address,
         impersonated.address,
         overrides
       )
@@ -543,7 +559,7 @@ describe.only("Zap", function () {
 
       expect(tokenOutBalance).to.be.above(tokenOutBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
-      .withArgs(impersonated.address, gnoXdai.address, lpBought, WXDAI.address, tokenOutBalance.sub(tokenOutBalanceInit))
+      .withArgs(impersonated.address, impersonated.address,gnoXdai.address, lpBought, WXDAI.address, tokenOutBalance.sub(tokenOutBalanceInit))
     })
 
     it("zap in wxdai token to cow/weth and zap out to native currency", async function () {
@@ -553,12 +569,13 @@ describe.only("Zap", function () {
       
       await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[WXDAI.address, WETH.address, COW.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[WXDAI.address, WETH.address, COW.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
@@ -569,16 +586,17 @@ describe.only("Zap", function () {
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, WXDAI.address, totalAmount, cowWeth.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,WXDAI.address, totalAmount, cowWeth.address, lpBought)
 
 
       const nativeCurrencyBalanceBeforeZapOut = await impersonated.getBalance()
 
       await cowWeth.connect(impersonated).approve(zap.address, lpBought)
       const txZapOut = await zap.connect(impersonated).zapOut(
-        {amountLpFrom: lpBought, amountTokenToMin: 0, dexIndex: dexIndex1, to: impersonated.address},
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [COW.address, WETH.address, AddressZero] },
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [WETH.address, AddressZero] },
+        {amountLpFrom: lpBought, amountTokenToMin: zeroBN, dexIndex: dexIndex1},
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [COW.address, WETH.address, AddressZero] },
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [WETH.address, AddressZero] },
+        impersonated.address,
         impersonated.address,
         overrides
       )
@@ -591,7 +609,7 @@ describe.only("Zap", function () {
       lpBalance = await cowWeth.balanceOf(impersonated.address)
       expect(lpBalance).to.be.eq(lpBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
-      .withArgs(impersonated.address, cowWeth.address, lpBought, AddressZero, eventAmountTo)
+      .withArgs(impersonated.address, impersonated.address,cowWeth.address, lpBought, AddressZero, eventAmountTo)
     })
 
     it("zap in native currency (xdai) token to cow/weth and zap out to natice currency", async function () {
@@ -602,9 +620,10 @@ describe.only("Zap", function () {
       const lpBalanceInit = await cowWeth.balanceOf(impersonated.address)
       
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[AddressZero, WETH.address, COW.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[AddressZero, WETH.address, COW.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
         {value: totalAmount, gasLimit: 9999999}
@@ -619,15 +638,16 @@ describe.only("Zap", function () {
 
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, AddressZero, totalAmount, cowWeth.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,AddressZero, totalAmount, cowWeth.address, lpBought)
 
       const nativeCurrencyBalanceBeforeZapOut = await impersonated.getBalance()
 
       await cowWeth.connect(impersonated).approve(zap.address, lpBought)
       const txZapOut = await zap.connect(impersonated).zapOut(
-        {amountLpFrom: lpBought, amountTokenToMin: 0, dexIndex: dexIndex1, to: impersonated.address},
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [COW.address, WETH.address, AddressZero] },
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [WETH.address, AddressZero] },
+        {amountLpFrom: lpBought, amountTokenToMin: zeroBN, dexIndex: dexIndex1},
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [COW.address, WETH.address, AddressZero] },
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [WETH.address, AddressZero] },
+        impersonated.address,
         impersonated.address,
         overrides
       )
@@ -641,7 +661,7 @@ describe.only("Zap", function () {
       lpBalance = await cowWeth.balanceOf(impersonated.address)
       expect(lpBalance).to.be.eq(lpBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
-      .withArgs(impersonated.address, cowWeth.address, lpBought, AddressZero, eventAmountTo)
+      .withArgs(impersonated.address, impersonated.address,cowWeth.address, lpBought, AddressZero, eventAmountTo)
     })
 
     it("zap in native currency (xdai) token to cow/weth and zap out to wrapped natice currency", async function () {
@@ -652,9 +672,10 @@ describe.only("Zap", function () {
       const lpBalanceInit = await cowWeth.balanceOf(impersonated.address)
       
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: totalAmount.div(2), amountMin: 0, path:[AddressZero, WETH.address, COW.address] , dexIndex: dexIndex1}, 
-        {amount: totalAmount.div(2), amountMin: 0, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex1, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[AddressZero, WETH.address, COW.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
         {value: totalAmount, gasLimit: 9999999}
@@ -669,15 +690,16 @@ describe.only("Zap", function () {
 
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, AddressZero, totalAmount, cowWeth.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,AddressZero, totalAmount, cowWeth.address, lpBought)
 
       const tokenOutBalanceBeforeZapOut = await WXDAI.balanceOf(impersonated.address)
       
       await cowWeth.connect(impersonated).approve(zap.address, lpBought)
       const txZapOut = await zap.connect(impersonated).zapOut(
-        {amountLpFrom: lpBought, amountTokenToMin: 0, dexIndex: dexIndex1, to: impersonated.address},
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [COW.address, WETH.address, WXDAI.address] },
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [WETH.address, WXDAI.address] },
+        {amountLpFrom: lpBought, amountTokenToMin: zeroBN, dexIndex: dexIndex1},
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [COW.address, WETH.address, WXDAI.address] },
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [WETH.address, WXDAI.address] },
+        impersonated.address,
         impersonated.address,
         overrides
         )
@@ -694,7 +716,7 @@ describe.only("Zap", function () {
       lpBalance = await cowWeth.balanceOf(impersonated.address)
       expect(lpBalance).to.be.eq(lpBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
-      .withArgs(impersonated.address, cowWeth.address, lpBought, WXDAI.address, eventAmountTo)
+      .withArgs(impersonated.address, impersonated.address,cowWeth.address, lpBought, WXDAI.address, eventAmountTo)
     })
   })
 
@@ -708,12 +730,13 @@ describe.only("Zap", function () {
       
       await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: amountA, amountMin: 0, path:[WXDAI.address, WETH.address] , dexIndex: dexIndex2}, 
-        {amount: amountB, amountMin: 0, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3},
+        {amount: amountA, amountMin: zeroBN, path:[WXDAI.address, WETH.address] , dexIndex: dexIndex2}, 
+        {amount: amountB, amountMin: zeroBN, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
@@ -727,7 +750,7 @@ describe.only("Zap", function () {
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, WXDAI.address, totalAmount, wethGnoDex3.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,WXDAI.address, totalAmount, wethGnoDex3.address, lpBought)
     })
 
     it("zap in wxdai token to cow/weth and zap out to cow", async function () {
@@ -739,12 +762,13 @@ describe.only("Zap", function () {
       
       await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
-        {amount: amountA, amountMin: 0, path:[WXDAI.address, WETH.address] , dexIndex: dexIndex2}, 
-        {amount: amountB, amountMin: 0, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
-        {amountAMin: 0, amountBMin: 0, amountLPMin: 0, dexIndex: dexIndex3, to: impersonated.address}, 
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3},
+        {amount: amountA, amountMin: zeroBN, path:[WXDAI.address, WETH.address] , dexIndex: dexIndex2}, 
+        {amount: amountB, amountMin: zeroBN, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
         impersonated.address, 
         true,
-        {value: 0, gasLimit: 9999999}
+        {value: zeroBN, gasLimit: 9999999}
       )
       
       const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
@@ -758,16 +782,17 @@ describe.only("Zap", function () {
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
-      .withArgs(impersonated.address, WXDAI.address, totalAmount, wethGnoDex3.address, lpBought)
+      .withArgs(impersonated.address, impersonated.address,WXDAI.address, totalAmount, wethGnoDex3.address, lpBought)
 
 
       const tokenBalanceBeforeZapOut = await COW.balanceOf(impersonated.address)
 
       await wethGnoDex3.connect(impersonated).approve(zap.address, lpBought)
       const txZapOut = await zap.connect(impersonated).zapOut(
-        {amountLpFrom: lpBought, amountTokenToMin: 0, dexIndex: dexIndex3, to: impersonated.address},
-        {amount: 0, amountMin: 0, dexIndex: dexIndex1, path: [WETH.address, COW.address] },
-        {amount: 0, amountMin: 0, dexIndex: dexIndex3, path: [GNO.address, COW.address] },
+        {amountLpFrom: lpBought, amountTokenToMin: zeroBN, dexIndex: dexIndex3},
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex1, path: [WETH.address, COW.address] },
+        {amount: zeroBN, amountMin: zeroBN, dexIndex: dexIndex3, path: [GNO.address, COW.address] },
+        impersonated.address,
         impersonated.address,
         overrides
       )
@@ -781,7 +806,7 @@ describe.only("Zap", function () {
       lpBalance = await wethGnoDex3.balanceOf(impersonated.address)
       expect(lpBalance).to.be.eq(lpBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
-      .withArgs(impersonated.address, wethGnoDex3.address, lpBought, COW.address, eventAmountTo)
+      .withArgs(impersonated.address, impersonated.address,wethGnoDex3.address, lpBought, COW.address, eventAmountTo)
     })
   })
   
