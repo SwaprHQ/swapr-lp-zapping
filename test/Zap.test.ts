@@ -116,7 +116,7 @@ describe.only("Zap", function () {
   })
 
   this.beforeEach('set supported dexs', async function () {
-    await zap.connect(owner).setSupportedDEX(dexIndex1, 'dex1', dxswapRouter.address, dxswapFactory.address, overrides);
+    await zap.connect(owner).setSupportedDEX(dexIndex1, 'Swapr', dxswapRouter.address, dxswapFactory.address, overrides);
     await zap.connect(owner).setSupportedDEX(dexIndex2, 'dex2', dex2Router.address, dex2Factory.address, overrides);
     await zap.connect(owner).setSupportedDEX(dexIndex3, 'dex3', dex3Router.address, dex3Factory.address, overrides);
   })
@@ -200,6 +200,25 @@ describe.only("Zap", function () {
       ).to.be.equal(dex2Router.address)
       expect((await zap.connect(impersonated).supportedDEXs(dexIndex3)).name
       ).to.be.equal('dex3')
+    })
+    it("Remove supported dex", async function () {
+      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).factory
+      ).to.be.equal(dxswapFactory.address)
+      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).router
+      ).to.be.equal(dxswapRouter.address)
+      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).name
+      ).to.be.equal('Swapr')
+
+      await expect( zap.connect(impersonated).removeSupportedDEX(dexIndex1, overrides))
+      .to.be.revertedWith("OnlyOwner()")
+      await zap.connect(owner).removeSupportedDEX(dexIndex1, overrides)
+      
+      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).factory
+      ).to.be.equal(AddressZero)
+      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).router
+      ).to.be.equal(AddressZero)
+      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).name
+      ).to.be.equal('')
     })
   })
 
@@ -807,6 +826,24 @@ describe.only("Zap", function () {
       expect(lpBalance).to.be.eq(lpBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
       .withArgs(impersonated.address, impersonated.address,wethGnoDex3.address, lpBought, COW.address, eventAmountTo)
+    })
+  })
+  describe("Ownable", function () {
+    it("Change owner", async function () {
+      await expect(zap.connect(impersonated).setOwner(user.address, overrides))
+      .to.be.revertedWith("OnlyOwner()")
+      await zap.connect(owner).setOwner(user.address, overrides)
+      expect(await zap.owner(overrides)).to.be.equal(owner.address)
+      await expect(zap.connect(user).acceptOwner(overrides))
+      .to.emit(zap, "OwnerSet").withArgs(user.address)
+      expect(await zap.owner(overrides)).to.be.equal(user.address)
+      
+      await expect(zap.connect(owner).setOwner(user.address, overrides))
+      .to.be.revertedWith("OnlyOwner()")
+      await zap.connect(user).setOwner(owner.address, overrides)
+      await expect(zap.connect(owner).acceptOwner(overrides))
+      .to.emit(zap, "OwnerSet").withArgs(owner.address)
+      expect(await zap.owner(overrides)).to.be.equal(owner.address)
     })
   })
   
