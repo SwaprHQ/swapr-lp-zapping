@@ -56,7 +56,7 @@ and zapOut from an ERC20 pair to an ERC20 or native currency
 contract Zap is Ownable, ReentrancyGuard {
     bool public stopped = false; // pause the contract if emergency
     uint16 public protocolFee = 50; // default 0.5% of zap amount protocol fee (range: 0-10000)
-    uint16 public affiliateSplit; // % share of protocol fee (0-100 %) (range: 0-10000)
+    uint16 public affiliateSplit; // % share of protocol fee 0-100 % (range: 0-10000)
     address public feeTo;
     address public feeToSetter;
     address public immutable nativeCurrencyWrapper;
@@ -110,11 +110,7 @@ contract Zap is Ownable, ReentrancyGuard {
     @param _feeToSetter The address setter of fee receiver
     @param _nativeCurrencyWrapper The address of wrapped native currency
     */
-    constructor(
-        address _owner,
-        address _feeToSetter,
-        address _nativeCurrencyWrapper
-    ) Ownable(_owner) {
+    constructor(address _owner, address _feeToSetter, address _nativeCurrencyWrapper) Ownable(_owner) {
         feeToSetter = _feeToSetter;
         nativeCurrencyWrapper = _nativeCurrencyWrapper;
     }
@@ -125,8 +121,15 @@ contract Zap is Ownable, ReentrancyGuard {
 
     /**
     @notice This function is used to invest in given Uniswap V2 pair through ETH/ERC20 Tokens
+    @dev Pool's token A and token B don't need to be sorted
+    @param zap Data for zap in - min amounts and dex index
+    @param swapTokenA Data for swap tx pool's token A - amounts, path & DEX
+    @param swapTokenB Data for swap tx pool's token B - amounts, path & DEX
+    @param receiver LP token receiver address
     @param affiliate Affiliate address
     @param transferResidual Set false to save gas by donating the residual remaining after a ZapTx
+    @return lpBought Amount of LP tokens transferred to receiver 
+    @return lpToken LP token address
      */
     function zapIn(
         ZapInTx calldata zap,
@@ -157,8 +160,14 @@ contract Zap is Ownable, ReentrancyGuard {
 
     /**
     @notice ZapTx out LP token in a single token
-    @dev path0 and path1 do not need to be ordered
+    @dev Pool's token A and token B don't need to be sorted
+    @param zap Data for zap out - min amounts & DEX
+    @param swapTokenA Data for swap tx pool's token A - amounts, path & DEX
+    @param swapTokenB Data for swap tx pool's token B - amounts, path & DEX
+    @param receiver Target token receiver address
     @param affiliate Affiliate address
+    @return amountTransferred Amount of tokenTo transferred to receiver 
+    @return tokenTo Target token address
     */
     function zapOut(
         ZapOutTx calldata zap,
@@ -181,14 +190,14 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Set address exempt from fee
     */
     function setFeeWhitelist(address zapAddress, bool status) external onlyOwner {
         feeWhitelist[zapAddress] = status;
     }
 
     /** 
-    @notice 
+    @notice Set new affiliate split value
     */
     function setNewAffiliateSplit(uint16 _newAffiliateSplit) external onlyOwner {
         if (_newAffiliateSplit > 10000) revert ForbiddenValue();
@@ -196,14 +205,18 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Set new affiliate status for specified address
     */
     function setAffiliateStatus(address _affiliate, bool _status) external onlyOwner {
         affiliates[_affiliate] = _status;
     }
 
     /** 
-    @notice 
+    @notice Set DEX's info which can be used for zap tx
+    @param _dexIndex Index used to identify DEX within the contract
+    @param _name DEX's conventional name used to identify DEX by the user 
+    @param _router DEX's router address
+    @param _factory DEX's factory address
     */
     function setSupportedDEX(
         uint8 _dexIndex,
@@ -218,7 +231,8 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Remove DEX's info which can be used for zap tx
+    @param _dexIndex Index of the DEX not supported anymore by the contract
     */
     function removeSupportedDEX(uint8 _dexIndex) external onlyOwner {
         supportedDEXs[_dexIndex].router = address(0);
@@ -227,8 +241,8 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice Sets the fee receiver address
-    @param _feeTo The address to send received zap fee 
+    @notice Set the fee receiver address
+    @param _feeTo Fee receiver address
     */
     function setFeeTo(address _feeTo) external {
         if (msg.sender != feeToSetter) revert OnlyFeeSetter();
@@ -236,8 +250,8 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @param _feeToSetter The address of the fee setter
-    @notice Sets the setter address
+    @notice Set the fee setter address
+    @param _feeToSetter Fee setter address
     */
     function setFeeToSetter(address _feeToSetter) external {
         if (msg.sender != feeToSetter) revert OnlyFeeSetter();
@@ -245,8 +259,8 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /**  
-    @notice Sets the protocol fee percent
-    @param _protocolFee The new protocol fee percent
+    @notice Set the protocol fee percent
+    @param _protocolFee The new protocol fee percent 0-100% (range: 0-10000)
     */
     function setProtocolFee(uint16 _protocolFee) external {
         if (msg.sender != feeToSetter) revert OnlyFeeSetter();
@@ -256,6 +270,7 @@ contract Zap is Ownable, ReentrancyGuard {
 
     /** 
     @notice Withdraw protocolFee share, retaining affilliate share 
+    @param tokens Tokens' addresses transferred to the owner as protocol fee
     */
     function withdrawTokens(address[] calldata tokens) external onlyOwner {
         for (uint256 i = 0; i < tokens.length; i++) {
@@ -273,6 +288,7 @@ contract Zap is Ownable, ReentrancyGuard {
 
     /**  
     @notice Withdraw affilliate share
+    @param tokens Tokens' addresses transferred to the msg sender as affiliate share of protocol fee
     */
     function affilliateWithdraw(address[] calldata tokens) external {
         uint256 tokenBal;
@@ -298,7 +314,8 @@ contract Zap is Ownable, ReentrancyGuard {
 
     /** 
     @notice Check if DEX's address is valid and supported
-    @return router factory DEX's router and factory addresses
+    @return router DEX's router address
+    @return factory DEX's factory address
     */
     function getSupportedDEX(uint8 _dexIndex) public view returns (address router, address factory) {
         router = supportedDEXs[_dexIndex].router;
@@ -307,7 +324,7 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Internal zap in
     */
     function _performZapIn(
         uint256 amountAToInvest,
@@ -345,7 +362,7 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Internal zap out
     */
     function _performZapOut(
         ZapOutTx calldata zap,
@@ -375,7 +392,12 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Transfer tokens or native currency to the contract for zap in
+    @param swapTokenA Data for swap tx pool's token A - amounts, path & DEX
+    @param swapTokenB Data for swap tx pool's token B - amounts, path & DEX
+    @param affiliate Affiliate address
+    @return amountAToInvest Token A amount to invest after fee substract
+    @return amountBToInvest Token B amount to invest after fee substract
     */
     function _pullTokens(
         SwapTx calldata swapTokenA,
@@ -401,6 +423,15 @@ contract Zap is Ownable, ReentrancyGuard {
         );
     }
 
+    /** 
+    @notice Transfer LP tokens to the contract for zap out
+    @param amount LP tokens amount
+    @param tokenA Pair's token A address 
+    @param tokenB Pair's token B address
+    @param router DEX router address
+    @param factory DEX factory address
+    @return lpToken LP tokens transferred from msg sender to the zap contract
+    */
     function _pullLpTokens(
         uint256 amount,
         address tokenA,
@@ -419,7 +450,11 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Subtract protocol fee for fee receiver and affiliate (if any)
+    @param token Token address
+    @param amount Token amount
+    @param affiliate Affiliate address
+    @return totalProtocolFeePortion Total amount of protocol fee taken
     */
     function _subtractProtocolFee(
         address token,
@@ -439,7 +474,11 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Internal fct for swapping lp pair's tokens
+    @param amountAToInvest Amount from of pair's tokenA to swap
+    @param amountBToInvest Amount from of pair's tokenB to swap
+    @param swapTokenA Data for swap tx pool's token A - amounts, path & DEX
+    @param swapTokenB Data for swap tx pool's token B - amounts, path & DEX
     */
     function _buyTokens(
         uint256 amountAToInvest,
@@ -548,6 +587,9 @@ contract Zap is Ownable, ReentrancyGuard {
     @param amountBMin The minimum amount of token A to receive
     @param router The address of platform's router
     @param transferResidual Set false to save gas by donating the residual remaining after a ZapTx
+    @return amountA Token A amount added to LP
+    @return amountB Token B amount added to LP
+    @return liquidity LP tokens minted
     */
     function _addLiquidity(
         address tokenA,
@@ -558,14 +600,7 @@ contract Zap is Ownable, ReentrancyGuard {
         uint256 amountBMin,
         address router,
         bool transferResidual
-    )
-        internal
-        returns (
-            uint256 amountA,
-            uint256 amountB,
-            uint256 liquidity
-        )
-    {
+    ) internal returns (uint256 amountA, uint256 amountB, uint256 liquidity) {
         _approveTokenIfNeeded(tokenA, amountADesired, router);
         _approveTokenIfNeeded(tokenB, amountBDesired, router);
 
@@ -598,11 +633,7 @@ contract Zap is Ownable, ReentrancyGuard {
     @param token The address of the token
     @param amount The amount of token to send
     */
-    function _approveTokenIfNeeded(
-        address token,
-        uint256 amount,
-        address router
-    ) internal {
+    function _approveTokenIfNeeded(address token, uint256 amount, address router) internal {
         if (IERC20(token).allowance(address(this), router) < amount) {
             // Note: some tokens (e.g. USDT, KNC) allowance must be first reset
             // to 0 before being able to update it
@@ -612,7 +643,12 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Get protocol fee from zap out tx and transfer tokens to receiver
+    @param tokenTo Zap out target token's address
+    @param amountTo tokenTo amount
+    @param to Target token receiver address
+    @param affiliate Affiliate address
+    @return amountTransferred Target token transferred
     */
     function _getFeeAndTransferTokens(
         address tokenTo,
@@ -636,7 +672,13 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice 
+    @notice Swap LP pair's tokens to target token
+    @param amountA The amount of pair's token A to swap
+    @param amountB The amount of pair's token B to swap
+    @param swapTokenA Data for swap tx pool's token A - amounts, path & DEX
+    @param swapTokenB Data for swap tx pool's token B - amounts, path & DEX
+    @param to The address that will receive tokenTo
+    @return amountTo The amount of token received
     */
     function _swapLpTokensToTargetTokens(
         uint256 amountA,
