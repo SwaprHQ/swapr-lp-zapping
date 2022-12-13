@@ -1,7 +1,7 @@
 import { BigNumber } from "ethers";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-const ETHERSCAN_CHAINS = ["1", "3", "4", "5"];
+const ETHERSCAN_CHAINS = ["1", "3", "4", "5", "420"];
 
 type EtherscanVerifyParams<T extends any[]> = {
     address: string;
