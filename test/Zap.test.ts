@@ -120,10 +120,9 @@ describe.only("Zap", function () {
     await zap.connect(owner).setSupportedDEX(dexIndex2, 'dex2', dex2Router.address, dex2Factory.address, overrides);
     await zap.connect(owner).setSupportedDEX(dexIndex3, 'dex3', dex3Router.address, dex3Factory.address, overrides);
   })
-
+  
   describe("Revert", function () {
-    it("Revert on zapIn", async function () {
-      let amountOut = await getAmountOut(WXDAI.address, gnoXdai)
+    it("revert on zapIn", async function () {
 
       await expect(
         zap.connect(impersonated).zapIn(
@@ -187,7 +186,7 @@ describe.only("Zap", function () {
   })
 
   describe("Supported DEXs", function () {
-    it("Set supported dexs", async function () {
+    it("set supported dexs", async function () {
       expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).factory
       ).to.be.equal(dxswapFactory.address)
       expect((await zap.connect(impersonated).supportedDEXs(dexIndex2)).router
@@ -198,12 +197,12 @@ describe.only("Zap", function () {
   })
 
   describe("Protocol fee", function () {
-    it("Initial addresses", async function () {
+    it("initial addresses", async function () {
       expect(await zap.feeTo()).to.eq(AddressZero)
       expect((await zap.feeToSetter()).toLowerCase()).to.eq(FEE_TO_SETTER)
       expect(await zap.protocolFee()).to.eq(50)
     })
-    it("Revert if caller is not owner", async function () {
+    it("revert if caller is not owner", async function () {
       await expect(zap.connect(impersonated).setFeeTo(user.address, overrides))
       .to.be.revertedWith("OnlyFeeSetter()")
       await expect(zap.connect(impersonated).setFeeToSetter(user.address, overrides))
@@ -211,11 +210,29 @@ describe.only("Zap", function () {
       await expect(zap.connect(impersonated).setProtocolFee(100, overrides))
       .to.be.revertedWith("OnlyFeeSetter()")
     })
-    it("Revert if invalid fee value", async function () {
+    it("revert if invalid fee value", async function () {
       await expect(zap.connect(feeSetter).setProtocolFee(BigNumber.from(11000), overrides))
       .to.be.revertedWith("ForbiddenValue()")
     })
-    it("Set protocol fee", async function () {
+    it("withdraw ownable", async function () {
+      await expect(zap.connect(impersonated).withdrawTokens([]))
+      .to.be.revertedWith("OnlyOwner()")
+      await expect(zap.connect(owner).withdrawTokens([]))
+      .to.not.be.reverted;
+    })
+    it("native asset fees withdrawal", async function () {
+      // load the contract with 100 ETH to pretend we have fees to collect
+      await network.provider.send("hardhat_setBalance", [zap.address, "0x56bc75e2d63100000"])
+
+      let nativeCurrencyAddress = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+      await expect(zap.connect(owner).withdrawTokens([nativeCurrencyAddress]))
+      .to.not.be.reverted
+    })
+    it("token fees withdrawal", async function () {
+      await expect(zap.connect(owner).withdrawTokens([WXDAI.address]))
+      .to.not.be.reverted
+    })
+    it("set protocol fee", async function () {
       await zap.connect(feeSetter).setProtocolFee(BigNumber.from(100), overrides)
       await zap.connect(feeSetter).setFeeTo(user.address, overrides)
       await zap.connect(feeSetter).setFeeToSetter(user.address, overrides)
@@ -336,11 +353,20 @@ describe.only("Zap", function () {
       const affliateTaken = (zapFeeTaken.mul(affliateSplit)).div(BigNumber.from(10000))
       expect(affliateBalance).to.be.eq(affliateTaken)
     })
+    it("native asset affiliate fees withdrawal", async function () {
+      // load the contract with 100 ETH to pretend we have fees to collect
+      await network.provider.send("hardhat_setBalance", [zap.address, "0x56bc75e2d63100000"])
 
-
+      let nativeCurrencyAddress = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
+      await expect(zap.connect(owner).affilliateWithdraw([nativeCurrencyAddress]))
+      .to.not.be.reverted
+    })
+    it("token affiliate fees withdrawal", async function () {
+      await expect(zap.connect(owner).affilliateWithdraw([WXDAI.address]))
+      .to.not.be.reverted
+    })
   })
-
-
+  
   describe("Zap In", function () {
     it("zap in dxd token to dxd/weth", async function () {
       const totalAmount = ethers.utils.parseEther("1")
@@ -442,6 +468,7 @@ describe.only("Zap", function () {
         {value: totalAmount, gasLimit: 9999999}
       )
       
+      // @todo: this value should also be asserted
       const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
       const lpBalance = await cowWeth.balanceOf(impersonated.address)
       const lpBought = lpBalance.sub(lpBalanceInit)
@@ -454,9 +481,8 @@ describe.only("Zap", function () {
       await expect(txZapIn).to.emit(zap, "ZapIn")
       .withArgs(impersonated.address, impersonated.address,AddressZero, totalAmount, cowWeth.address, lpBought)
     })
-
   })
-
+  
   describe("Zap Out", function () {
     it("zap in dxd token to dxd/weth and zap out to wxdai", async function () {
       const totalAmount = ethers.utils.parseEther("1")
@@ -803,8 +829,9 @@ describe.only("Zap", function () {
       .withArgs(impersonated.address, impersonated.address,wethGnoDex3.address, lpBought, COW.address, eventAmountTo)
     })
   })
+
   describe("Ownable", function () {
-    it("Change owner", async function () {
+    it("change owner", async function () {
       await expect(zap.connect(impersonated).setOwner(user.address, overrides))
       .to.be.revertedWith("OnlyOwner()")
       await zap.connect(owner).setOwner(user.address, overrides)
@@ -821,6 +848,36 @@ describe.only("Zap", function () {
       expect(await zap.owner(overrides)).to.be.equal(owner.address)
     })
   })
+
+  describe("Stop in emergency", function () {
+    it("ownable", async function () {
+      await expect(zap.connect(impersonated).toggleContractActive())
+      .to.be.revertedWith("OnlyOwner()")
+      await expect(zap.connect(owner).toggleContractActive())
+      .to.not.be.reverted
+    })
+    it("toggle contract active", async function () {
+      await zap.connect(owner).toggleContractActive()
+      expect(await zap.stopped()).to.be.true;
+      await zap.connect(owner).toggleContractActive()
+      expect(await zap.stopped()).to.be.false;
+    })
+    it("stop in emergency modifier", async function () {
+      await zap.connect(owner).toggleContractActive()
+      expect(await zap.stopped()).to.be.true;
+      
+      await expect(
+        zap.connect(impersonated).zapIn(
+          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3}, 
+          {amount: zeroBN, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
+          {amount: zeroBN, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+          impersonated.address,
+          impersonated.address, 
+          true
+          )
+      ).to.be.revertedWith("Temporarily Paused")
+    })
+  })
   
   // reset back to a fresh forked state
   after(async function () {
@@ -831,23 +888,8 @@ describe.only("Zap", function () {
   })
 })
 
-const getAmountOut = async (tokenIn: string, pair: DXswapPair) => {
-  const reserves = await pair.getReserves()
-  const token0 = await pair.token0()
-  let reserveOut = reserves[0]
-  let reserveIn = reserves[1]
-
-  if (tokenIn == token0) {
-    reserveOut=reserves[1]
-    reserveIn=reserves[0]
-  }
-
-  return reserveOut.mul(amountIn).div(reserveIn.add(amountIn))
-}
-
 const getTxData = async (tx: ContractTransaction, zapType: string): Promise<{ethSpendForTx: BigNumber; sender: string, tokenFrom: string, amountFrom: BigNumber, tokenTo: string, amountTo: BigNumber}> => {
   const txReceipt = await tx.wait();
-  // console.log(txReceipt.events)
   const event = txReceipt.events && txReceipt.events.find(e => e.event === zapType);
   const ethSpendForTx = txReceipt.gasUsed.mul(txReceipt.effectiveGasPrice)
   const sender = event?.args && event?.args["sender"]
