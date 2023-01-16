@@ -291,16 +291,16 @@ contract Zap is Ownable, ReentrancyGuard {
     @param tokens Tokens' addresses transferred to the msg sender as affiliate share of protocol fee
     */
     function affilliateWithdraw(address[] calldata tokens) external {
-        uint256 tokenBal;
+        uint256 tokenBalance;
         for (uint256 i = 0; i < tokens.length; i++) {
-            tokenBal = affiliateBalance[msg.sender][tokens[i]];
+            tokenBalance = affiliateBalance[msg.sender][tokens[i]];
             affiliateBalance[msg.sender][tokens[i]] = 0;
-            totalAffiliateBalance[tokens[i]] = totalAffiliateBalance[tokens[i]] - tokenBal;
+            totalAffiliateBalance[tokens[i]] = totalAffiliateBalance[tokens[i]] - tokenBalance;
 
             if (tokens[i] == nativeCurrencyAddress) {
-                TransferHelper.safeTransferETH(msg.sender, tokenBal);
+                TransferHelper.safeTransferETH(msg.sender, tokenBalance);
             } else {
-                TransferHelper.safeTransfer(tokens[i], msg.sender, tokenBal);
+                TransferHelper.safeTransfer(tokens[i], msg.sender, tokenBalance);
             }
         }
     }
