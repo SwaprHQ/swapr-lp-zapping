@@ -182,7 +182,19 @@ contract Zap is Ownable, ReentrancyGuard {
 
         (uint256 amountTo, address lpToken) = _performZapOut(zap, swapTokenA, swapTokenB);
 
-        amountTransferred = _getFeeAndTransferTokens(tokenTo, amountTo, receiver, affiliate);
+        uint256 totalProtocolFeePortion;
+        if (tokenTo == address(0)) {
+            // unwrap to native currency
+            IWETH(nativeCurrencyWrapper).withdraw(amountTo);
+            totalProtocolFeePortion = _subtractProtocolFee(nativeCurrencyAddress, amountTo, affiliate);
+            TransferHelper.safeTransferETH(receiver, amountTo - totalProtocolFeePortion);
+        } else {
+            totalProtocolFeePortion = _subtractProtocolFee(tokenTo, amountTo, affiliate);
+            TransferHelper.safeTransfer(tokenTo, receiver, amountTo - totalProtocolFeePortion);
+        }
+
+        amountTransferred = amountTo - totalProtocolFeePortion;
+
         if (amountTransferred < zap.amountTokenToMin) revert InsufficientMinAmount();
 
         emit ZapOut(msg.sender, receiver, lpToken, zap.amountLpFrom, tokenTo, amountTransferred);
@@ -628,35 +640,6 @@ contract Zap is Ownable, ReentrancyGuard {
             TransferHelper.safeApprove(token, router, 0);
             TransferHelper.safeApprove(token, router, amount);
         }
-    }
-
-    /** 
-    @notice Get protocol fee from zap out tx and transfer tokens to receiver
-    @param tokenTo Zap out target token's address
-    @param amountTo tokenTo amount
-    @param to Target token receiver address
-    @param affiliate Affiliate address
-    @return amountTransferred Target token transferred
-    */
-    function _getFeeAndTransferTokens(
-        address tokenTo,
-        uint256 amountTo,
-        address to,
-        address affiliate
-    ) internal returns (uint256 amountTransferred) {
-        uint256 totalProtocolFeePortion;
-
-        if (tokenTo == address(0)) {
-            // unwrap to native currency
-            IWETH(nativeCurrencyWrapper).withdraw(amountTo);
-            totalProtocolFeePortion = _subtractProtocolFee(nativeCurrencyAddress, amountTo, affiliate);
-            TransferHelper.safeTransferETH(to, amountTo - totalProtocolFeePortion);
-        } else {
-            totalProtocolFeePortion = _subtractProtocolFee(tokenTo, amountTo, affiliate);
-            TransferHelper.safeTransfer(tokenTo, to, amountTo - totalProtocolFeePortion);
-        }
-
-        amountTransferred = amountTo - totalProtocolFeePortion;
     }
 
     /** 
