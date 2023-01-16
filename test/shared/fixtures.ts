@@ -1,6 +1,6 @@
 import { expandTo18Decimals } from './utilities'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
-import { DXswapFactory, DXswapFactory__factory, DXswapPair, DXswapPair__factory, DXswapRouter, DXswapRouter__factory, ERC20, ERC20__factory, TokenERC20__factory, WETH9, WETH9__factory, WXDAI, WXDAI__factory, Zap, Zap__factory } from '../../typechain'
+import { UniswapV2Factory, UniswapV2Router02, DXswapFactory, DXswapFactory__factory, DXswapPair, DXswapPair__factory, DXswapRouter, DXswapRouter__factory, ERC20, ERC20__factory, TokenERC20__factory, WETH9, WETH9__factory, WXDAI, WXDAI__factory, Zap, Zap__factory, UniswapV2Pair, UniswapV2Pair__factory } from '../../typechain'
 import { ethers } from 'hardhat'
 import { Address } from 'hardhat-deploy/types'
 
@@ -12,6 +12,8 @@ interface DXswapFixture {
   dex2Factory: DXswapFactory
   dex3Router: DXswapRouter
   dex3Factory: DXswapFactory  
+  uniswapV2Factory: UniswapV2Factory
+  uniswapV2Router: UniswapV2Router02
   WETH: WETH9
   WXDAI: WXDAI
   GNO: ERC20
@@ -27,6 +29,7 @@ interface DXswapFixture {
   cowWeth: DXswapPair
   gnoDxd: DXswapPair
   wethGnoDex3: DXswapPair
+  wxdaiWeth: UniswapV2Pair
 
   FEE_TO_SETTER: Address
   }
@@ -63,6 +66,8 @@ const SWPR_COW_WETH = "0x8028457E452D7221dB69B1e0563AA600A059fab1"
 const DEX2_ROUTER_ADDRESS = "0xb18d4f69627F8320619A696202Ad2C430CeF7C53"
 const DEX2_FACTORY_ADDRESS = "0x965769C9CeA8A7667246058504dcdcDb1E2975A5"
 
+const UNISWAP_WXDAI_WETH = "0x2Eb71cD867E7E1d3A17eCD981d592e079B6Cb985";
+
 // dex: honeyswap
 const DEX3_ROUTER_ADDRESS = "0x1C232F01118CB8B424793ae03F870aa7D0ac7f77"
 const DEX3_FACTORY_ADDRESS = "0xA818b4F111Ccac7AA31D0BCc0806d64F2E0737D7"
@@ -87,8 +92,12 @@ const DEX3_WETH_GNO = "0x28Dbd35fD79f48bfA9444D330D14683e7101d817"
   // deploy DXswapFactory
   const swapFactory = await ethers.getContractFactory("DXswapFactory")
   const dxswapFactory = swapFactory.attach(SWPR_FACTORY_ADDRESS)
-  const dex2Factory = swapFactory.attach(DEX2_FACTORY_ADDRESS)
+  const dex2Factory = dxswapFactory.attach(DEX2_FACTORY_ADDRESS)
   const dex3Factory = swapFactory.attach(DEX3_FACTORY_ADDRESS)
+
+  // DEX2 (aka: levinswap) is an ~unmodified Uniswap V2 fork
+  const uniswapV2FactoryContract = await ethers.getContractFactory("UniswapV2Factory")
+  const uniswapV2Factory = uniswapV2FactoryContract.attach(DEX2_FACTORY_ADDRESS)
 
   // deploy router  
   const routerFactory = await ethers.getContractFactory("DXswapRouter")
@@ -96,8 +105,15 @@ const DEX3_WETH_GNO = "0x28Dbd35fD79f48bfA9444D330D14683e7101d817"
   const dex2Router = routerFactory.attach(DEX2_ROUTER_ADDRESS)
   const dex3Router = routerFactory.attach(DEX3_ROUTER_ADDRESS)
 
+  // DEX2 (aka: levinswap) is an ~unmodified Uniswap V2 fork
+  const uniswapV2RouterFactory = await ethers.getContractFactory("UniswapV2Router02")
+  const uniswapV2Router = uniswapV2RouterFactory.attach(DEX2_ROUTER_ADDRESS)
+
   // initialize DXswapPair factory
   const dxSwapPair_factory = await ethers.getContractFactory("DXswapPair")
+
+  // initialize UniswapV2Pair factory
+  const uniswapV2Pair_factory = await ethers.getContractFactory("UniswapV2Pair")
 
   // create pairs SWPR
   const wethXdai = dxSwapPair_factory.attach(SWPR_WETH_XDAI)
@@ -107,6 +123,7 @@ const DEX3_WETH_GNO = "0x28Dbd35fD79f48bfA9444D330D14683e7101d817"
   const dxdWeth = dxSwapPair_factory.attach(SWPR_DXD_WETH)
   const cowWeth = dxSwapPair_factory.attach(SWPR_COW_WETH)
   const gnoDxd = dxSwapPair_factory.attach(SWPR_GNO_DXD)
+  const wxdaiWeth = uniswapV2Pair_factory.attach(UNISWAP_WXDAI_WETH);
 
   // create pairs dex3
   const wethGnoDex3 = dxSwapPair_factory.attach(DEX3_WETH_GNO)
@@ -122,6 +139,8 @@ const DEX3_WETH_GNO = "0x28Dbd35fD79f48bfA9444D330D14683e7101d817"
     dex2Factory,
     dex3Router,
     dex3Factory, 
+    uniswapV2Factory,
+    uniswapV2Router,
     WETH,
     WXDAI,
     GNO,
@@ -136,6 +155,7 @@ const DEX3_WETH_GNO = "0x28Dbd35fD79f48bfA9444D330D14683e7101d817"
     cowWeth,
     gnoDxd,
     wethGnoDex3,
+    wxdaiWeth,
     FEE_TO_SETTER
   }
 }

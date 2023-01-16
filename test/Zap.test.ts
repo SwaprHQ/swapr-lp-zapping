@@ -2,7 +2,7 @@
 import { ethers, network, waffle } from "hardhat"
 import { expect } from "chai"
 import { BigNumber, constants, ContractTransaction } from "ethers"
-import { DXswapFactory, DXswapPair, DXswapRouter, ERC20, IERC20, WETH9, WXDAI, Zap } from "../typechain"
+import { UniswapV2Factory, UniswapV2Router02, DXswapFactory, DXswapPair, DXswapRouter, ERC20, IERC20, WETH9, WXDAI, Zap, UniswapV2Pair } from "../typechain"
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
 import { dxswapFixture } from "./shared/fixtures"
 import { Address } from "hardhat-deploy/types"
@@ -14,6 +14,7 @@ const dexIndex0 = BigNumber.from(0)
 const dexIndex1 = BigNumber.from(1)
 const dexIndex2 = BigNumber.from(2)
 const dexIndex3 = BigNumber.from(3)
+const uniswapV2Index4 = BigNumber.from(4)
 
 const overrides = {
   gasLimit: 9999999
@@ -30,10 +31,12 @@ describe.only("Zap", function () {
   let dxswapRouter: DXswapRouter
   let dex2Router: DXswapRouter
   let dex3Router: DXswapRouter
+  let uniswapV2Router: UniswapV2Router02
 
   let dxswapFactory: DXswapFactory
   let dex2Factory: DXswapFactory
   let dex3Factory: DXswapFactory
+  let uniswapV2Factory: UniswapV2Factory
 
   let WETH: WETH9
   let WXDAI: WXDAI
@@ -49,6 +52,7 @@ describe.only("Zap", function () {
   let gnoDxd: DXswapPair
   let dxdWeth: DXswapPair
   let cowWeth: DXswapPair
+  let wxdaiWeth: UniswapV2Pair
 
   let wethGnoDex3: DXswapPair
 
@@ -75,9 +79,11 @@ describe.only("Zap", function () {
     dxswapRouter = fixture.dxswapRouter
     dex2Router = fixture.dex2Router
     dex3Router = fixture.dex3Router
+    uniswapV2Router = fixture.uniswapV2Router
     dxswapFactory = fixture.dxswapFactory
     dex2Factory = fixture.dex2Factory
     dex3Factory = fixture.dex3Factory
+    uniswapV2Factory = fixture.uniswapV2Factory
     
     WETH = fixture.WETH
     WXDAI = fixture.WXDAI
@@ -93,6 +99,7 @@ describe.only("Zap", function () {
     gnoDxd = fixture.gnoDxd
     dxdWeth = fixture.dxdWeth
     cowWeth = fixture.cowWeth
+    wxdaiWeth = fixture.wxdaiWeth
 
     wethGnoDex3 = fixture.wethGnoDex3
 
@@ -119,6 +126,7 @@ describe.only("Zap", function () {
     await zap.connect(owner).setSupportedDEX(dexIndex1, 'Swapr', dxswapRouter.address, dxswapFactory.address, overrides);
     await zap.connect(owner).setSupportedDEX(dexIndex2, 'dex2', dex2Router.address, dex2Factory.address, overrides);
     await zap.connect(owner).setSupportedDEX(dexIndex3, 'dex3', dex3Router.address, dex3Factory.address, overrides);
+    await zap.connect(owner).setSupportedDEX(uniswapV2Index4, 'UniswapV2', uniswapV2Router.address, uniswapV2Factory.address, overrides);
   })
   
   describe("Revert", function () {
@@ -182,6 +190,53 @@ describe.only("Zap", function () {
       await expect(
         zap.connect(owner).setNewAffiliateSplit(BigNumber.from(10001))
       ).to.be.revertedWith("ForbiddenValue()")
+    })
+
+    it("revert on zapIn - uniswap", async function () {
+
+      await expect(
+        zap.connect(impersonated).zapIn(
+          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4}, 
+          {amount: zeroBN, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: uniswapV2Index4}, 
+          {amount: zeroBN, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
+          impersonated.address,
+          impersonated.address, 
+          true
+          )
+      ).to.be.revertedWith("InvalidInputAmount()")
+          
+      await expect(
+        zap.connect(impersonated).zapIn(
+          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4}, 
+          {amount: zeroBN, amountMin: zeroBN, path:[AddressZero, GNO.address] , dexIndex: uniswapV2Index4}, 
+          {amount: zeroBN, amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: uniswapV2Index4}, 
+          impersonated.address, 
+          impersonated.address, 
+          true,
+          {value: zeroBN, gasLimit: 9999999}
+          )
+      ).to.be.revertedWith("InvalidInputAmount()")
+
+      await expect(
+        zap.connect(impersonated).zapIn(
+          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4}, 
+          {amount: amountIn, amountMin: zeroBN, path:[COW.address, GNO.address] , dexIndex: uniswapV2Index4}, 
+          {amount: amountIn, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
+          impersonated.address,
+          impersonated.address, 
+          true
+          )
+      ).to.be.revertedWith("InvalidStartPath()")
+
+      await expect(
+      zap.connect(impersonated).zapOut(
+        {amountLpFrom: zeroBN, amountTokenToMin: zeroBN, dexIndex: uniswapV2Index4}, 
+        {amount: amountIn, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: uniswapV2Index4}, 
+        {amount: amountIn, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
+        impersonated.address,
+        impersonated.address
+        )
+    ).to.be.revertedWith("InvalidTargetPath()")
     })
   })
 
@@ -353,6 +408,92 @@ describe.only("Zap", function () {
       const affliateTaken = (zapFeeTaken.mul(affliateSplit)).div(BigNumber.from(10000))
       expect(affliateBalance).to.be.eq(affliateTaken)
     })
+
+    it("zap in protocol fee on & address is not whitelisted - uniswap v2", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const protocolFeeForZap = await zap.protocolFee()
+      expect(protocolFeeForZap).to.be.above(0)
+
+      // unlist user to check if protocol fee was taken
+      await zap.setFeeWhitelist(impersonated.address, false)
+      expect(await zap.feeWhitelist(impersonated.address)).to.eq(false)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[WXDAI.address] , dexIndex: uniswapV2Index4}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
+        impersonated.address, 
+        randomSigner.address, 
+        true,
+        {value: zeroBN, gasLimit: 9999999}
+      )
+      
+      const zapTokenBalance = await WXDAI.balanceOf(zap.address)
+      const zapFeeTaken = (totalAmount.mul(protocolFeeForZap)).div(BigNumber.from(10000))
+      expect(zapTokenBalance).to.be.eq(zapFeeTaken)
+    })
+    
+    it("zap in with protocl fee on & address whitelisted - uniswap v2", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const protocolFeeForZap = await zap.protocolFee()
+      expect(protocolFeeForZap).to.be.above(0)
+      await zap.setFeeWhitelist(impersonated.address, true)
+      expect(await zap.feeWhitelist(impersonated.address)).to.eq(true)
+
+      let zapTokenBalanceInit = await WXDAI.balanceOf(zap.address)
+      expect(zapTokenBalanceInit).to.be.eq(0)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[WXDAI.address] , dexIndex: uniswapV2Index4}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
+        impersonated.address, 
+        impersonated.address, 
+        true,
+        {value: zeroBN, gasLimit: 9999999}
+      )
+      
+      let zapTokenBalance = await WXDAI.balanceOf(zap.address)
+      expect(zapTokenBalance).to.be.eq(0)   
+    })
+
+    it("zap in protocol fee on & address is not whitelisted & affiliate on - uniswap v2", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const _newAffliateSplit = BigNumber.from(2000)
+      await zap.setNewAffiliateSplit(_newAffliateSplit)
+      const affliateSplit = await zap.affiliateSplit()
+      expect(affliateSplit).to.eq(_newAffliateSplit)
+      await zap.setAffiliateStatus(randomSigner.address, true)
+      expect(await zap.affiliates(randomSigner.address)).to.eq(true)
+      
+      const protocolFeeForZap = await zap.protocolFee()
+      expect(protocolFeeForZap).to.be.above(0)
+
+      // unlist user to check if protocol fee was taken
+      await zap.setFeeWhitelist(impersonated.address, false)
+      expect(await zap.feeWhitelist(impersonated.address)).to.eq(false)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[WXDAI.address] , dexIndex: uniswapV2Index4}, 
+        impersonated.address, 
+        randomSigner.address, 
+        true,
+        {value: zeroBN, gasLimit: 9999999}
+      )
+      
+      const zapTokenBalance = await WXDAI.balanceOf(zap.address)
+      const zapFeeTaken = (totalAmount.mul(protocolFeeForZap)).div(BigNumber.from(10000))
+      expect(zapTokenBalance).to.be.eq(zapFeeTaken)
+      const affliateBalance = await zap.affiliateBalance(randomSigner.address, WXDAI.address)
+      const affliateTaken = (zapFeeTaken.mul(affliateSplit)).div(BigNumber.from(10000))
+      expect(affliateBalance).to.be.eq(affliateTaken)
+    })
+
     it("native asset affiliate fees withdrawal", async function () {
       // load the contract with 100 ETH to pretend we have fees to collect
       await network.provider.send("hardhat_setBalance", [zap.address, "0x56bc75e2d63100000"])
@@ -481,6 +622,33 @@ describe.only("Zap", function () {
       await expect(txZapIn).to.emit(zap, "ZapIn")
       .withArgs(impersonated.address, impersonated.address,AddressZero, totalAmount, cowWeth.address, lpBought)
     })
+
+    it("zap in wxdai token to wxdai/weth - uniswap v2", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const lpBalanceInit = await wxdaiWeth.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await WXDAI.balanceOf(impersonated.address)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[WXDAI.address] , dexIndex: uniswapV2Index4}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
+        impersonated.address, 
+        impersonated.address, 
+        true,
+        {value: zeroBN, gasLimit: 9999999}
+      )
+      
+      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
+      const lpBalance = await wxdaiWeth.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+      
+      expect(lpBought).to.be.above(0)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, impersonated.address,WXDAI.address, totalAmount, wxdaiWeth.address, lpBought)
+    })
   })
   
   describe("Zap Out", function () {
@@ -532,7 +700,6 @@ describe.only("Zap", function () {
       .withArgs(impersonated.address, impersonated.address,dxdWeth.address, lpBought, WXDAI.address, tokenOutBalance.sub(tokenOutBalanceInit))
 
     })
-
 
     it("zap in dxd token to gno/wxdai and zap out to wxdai", async function () {
       const totalAmount = ethers.utils.parseEther("1")
@@ -741,6 +908,55 @@ describe.only("Zap", function () {
   })
 
   describe("Zap with different DEXs", function () {
+    it("zap in wxdai token to wxdai/weth and zap out to wxdai - uniswap v2", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const lpBalanceInit = await wxdaiWeth.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await WXDAI.balanceOf(impersonated.address)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[WXDAI.address] , dexIndex: uniswapV2Index4}, 
+        impersonated.address, 
+        impersonated.address, 
+        true,
+        {value: zeroBN, gasLimit: 9999999}
+      )
+      
+      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
+      let lpBalance = await wxdaiWeth.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+      
+      expect(lpBought).to.be.above(0)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, impersonated.address, WXDAI.address, totalAmount, wxdaiWeth.address, lpBought)
+      
+      const tokenOutBalanceInit = await WXDAI.balanceOf(impersonated.address) 
+
+      await wxdaiWeth.connect(impersonated).approve(zap.address, lpBought)
+      const txZapOut = await zap.connect(impersonated).zapOut(
+        {amountLpFrom: lpBought, amountTokenToMin: zeroBN, dexIndex: uniswapV2Index4},
+        {amount: zeroBN, amountMin: zeroBN, path: [WXDAI.address], dexIndex: uniswapV2Index4 },
+        {amount: zeroBN, amountMin: zeroBN, path: [WETH.address, WXDAI.address], dexIndex: uniswapV2Index4 },
+        impersonated.address,
+        impersonated.address,
+        overrides
+      )
+      
+      lpBalance = await wxdaiWeth.balanceOf(impersonated.address)
+      expect(lpBalance).to.be.eq(lpBalanceInit)
+
+      const tokenOutBalance = await WXDAI.balanceOf(impersonated.address) 
+
+      expect(tokenOutBalance).to.be.above(tokenOutBalanceInit)
+      await expect(txZapOut).to.emit(zap, "ZapOut")
+      .withArgs(impersonated.address, impersonated.address, wxdaiWeth.address, lpBought, WXDAI.address, tokenOutBalance.sub(tokenOutBalanceInit))
+
+    })
+
     it("zap in dxd token to dxd/weth", async function () {
       const amountA = ethers.utils.parseEther("1")
       const amountB = ethers.utils.parseEther("13")
