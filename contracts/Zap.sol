@@ -277,7 +277,7 @@ contract Zap is Ownable, ReentrancyGuard {
             uint256 qty;
 
             if (tokens[i] == nativeCurrencyAddress) {
-                qty = address(this).balance - totalAffiliateBalance[tokens[i]];
+                qty = address(this).balance - totalAffiliateBalance[nativeCurrencyAddress];
                 TransferHelper.safeTransferETH(owner, qty);
             } else {
                 qty = IERC20(tokens[i]).balanceOf(address(this)) - totalAffiliateBalance[tokens[i]];
