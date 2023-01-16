@@ -396,8 +396,8 @@ contract Zap is Ownable, ReentrancyGuard {
     @param swapTokenA Data for swap tx pool's token A - amounts, path & DEX
     @param swapTokenB Data for swap tx pool's token B - amounts, path & DEX
     @param affiliate Affiliate address
-    @return amountAToInvest Token A amount to invest after fee substract
-    @return amountBToInvest Token B amount to invest after fee substract
+    @return amountAToInvest Token A amount to invest after fee subtract
+    @return amountBToInvest Token B amount to invest after fee subtract
     */
     function _pullTokens(
         SwapTx calldata swapTokenA,
@@ -450,7 +450,7 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice Subtract protocol fee for fee receiver and affiliate (if any)
+    @notice Subtract protocol fee for fee receiver and affiliate if it's > 0 and the address is not whitelisted
     @param token Token address
     @param amount Token amount
     @param affiliate Affiliate address
