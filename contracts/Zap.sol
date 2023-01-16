@@ -399,12 +399,12 @@ contract Zap is Ownable, ReentrancyGuard {
             pathB[pathB.length - 1] = nativeCurrencyWrapper;
 
             amountTo =
-                _swapExactTokensForTokens(amountA, swapTokenA.amountMin, pathA, address(this), routerSwapA) +
-                _swapExactTokensForTokens(amountB, swapTokenB.amountMin, pathB, address(this), routerSwapB);
+                _swapExactTokensForTokens(amountA, swapTokenA.amountMin, pathA, routerSwapA) +
+                _swapExactTokensForTokens(amountB, swapTokenB.amountMin, pathB, routerSwapB);
         } else {
             amountTo =
-            _swapExactTokensForTokens(amountA, swapTokenA.amountMin, swapTokenA.path, address(this), routerSwapA) +
-            _swapExactTokensForTokens(amountB, swapTokenB.amountMin, swapTokenB.path, address(this), routerSwapB);
+            _swapExactTokensForTokens(amountA, swapTokenA.amountMin, swapTokenA.path, routerSwapA) +
+            _swapExactTokensForTokens(amountB, swapTokenB.amountMin, swapTokenB.path, routerSwapB);
         }
     }
 
@@ -520,14 +520,12 @@ contract Zap is Ownable, ReentrancyGuard {
                 amountAToInvest,
                 swapTokenA.amountMin,
                 pathA,
-                address(this),
                 routerSwapA
             );
             tokenBBought = _swapExactTokensForTokens(
                 amountBToInvest,
                 swapTokenB.amountMin,
                 pathB,
-                address(this),
                 routerSwapB
             );
 
@@ -538,14 +536,12 @@ contract Zap is Ownable, ReentrancyGuard {
             amountAToInvest,
             swapTokenA.amountMin,
             swapTokenA.path,
-            address(this),
             routerSwapA
         );
         tokenBBought = _swapExactTokensForTokens(
             amountBToInvest,
             swapTokenB.amountMin,
             swapTokenB.path,
-            address(this),
             routerSwapB
         );
     }
@@ -555,19 +551,17 @@ contract Zap is Ownable, ReentrancyGuard {
     @param amountFrom The amount of tokenFrom to swap
     @param amountToMin The min amount of tokenTo to receive
     @param path The path to follow to swap tokenFrom to TokenTo
-    @param to The address that will receive tokenTo
     @return amountTo The amount of token received
     */
     function _swapExactTokensForTokens(
         uint256 amountFrom,
         uint256 amountToMin,
         address[] memory path,
-        address to,
         address router
     ) internal returns (uint256 amountTo) {
         uint256 len = path.length;
         address tokenTo = path[len - 1];
-        uint256 balanceBefore = IERC20(tokenTo).balanceOf(to);
+        uint256 balanceBefore = IERC20(tokenTo).balanceOf(address(this));
 
         // swap tokens following the path
         if (len > 1) {
@@ -576,20 +570,14 @@ contract Zap is Ownable, ReentrancyGuard {
                 amountFrom,
                 amountToMin,
                 path,
-                to,
+                address(this),
                 deadline
             );
-            amountTo = IERC20(tokenTo).balanceOf(to) - balanceBefore;
+            amountTo = IERC20(tokenTo).balanceOf(address(this)) - balanceBefore;
         } else {
             // no swap needed because path is only 1-element
-            if (to != address(this)) {
-                // transfer token to receiver address
-                TransferHelper.safeTransfer(tokenTo, to, amountFrom);
-                amountTo = IERC20(tokenTo).balanceOf(to) - balanceBefore;
-            } else {
-                // ZapIn case: token already on Zap contract balance
-                amountTo = amountFrom;
-            }
+            // ZapIn case: token already on Zap contract balance
+            amountTo = amountFrom;
         }
         if (amountTo < amountToMin) revert InsufficientMinAmount();
     }
