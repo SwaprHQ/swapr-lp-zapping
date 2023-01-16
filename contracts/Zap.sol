@@ -388,7 +388,24 @@ contract Zap is Ownable, ReentrancyGuard {
 
         if (amountA == 0 || amountB == 0) revert InsufficientMinAmount();
 
-        amountTo = _swapLpTokensToTargetTokens(amountA, amountB, swapTokenA, swapTokenB, address(this));
+        (address routerSwapA, ) = getSupportedDEX(swapTokenA.dexIndex);
+        (address routerSwapB, ) = getSupportedDEX(swapTokenB.dexIndex);
+
+        if (swapTokenA.path[swapTokenA.path.length - 1] == address(0)) {
+            // set target token for native currency wrapper instead of address(0x00)
+            address[] memory pathA = swapTokenA.path;
+            address[] memory pathB = swapTokenB.path;
+            pathA[pathA.length - 1] = nativeCurrencyWrapper;
+            pathB[pathB.length - 1] = nativeCurrencyWrapper;
+
+            amountTo =
+                _swapExactTokensForTokens(amountA, swapTokenA.amountMin, pathA, address(this), routerSwapA) +
+                _swapExactTokensForTokens(amountB, swapTokenB.amountMin, pathB, address(this), routerSwapB);
+        } else {
+            amountTo =
+            _swapExactTokensForTokens(amountA, swapTokenA.amountMin, swapTokenA.path, address(this), routerSwapA) +
+            _swapExactTokensForTokens(amountB, swapTokenB.amountMin, swapTokenB.path, address(this), routerSwapB);
+        }
     }
 
     /** 
@@ -640,42 +657,5 @@ contract Zap is Ownable, ReentrancyGuard {
             TransferHelper.safeApprove(token, router, 0);
             TransferHelper.safeApprove(token, router, amount);
         }
-    }
-
-    /** 
-    @notice Swap LP pair's tokens to target token
-    @param amountA The amount of pair's token A to swap
-    @param amountB The amount of pair's token B to swap
-    @param swapTokenA Data for swap tx pool's token A - amounts, path & DEX
-    @param swapTokenB Data for swap tx pool's token B - amounts, path & DEX
-    @param to The address that will receive tokenTo
-    @return amountTo The amount of token received
-    */
-    function _swapLpTokensToTargetTokens(
-        uint256 amountA,
-        uint256 amountB,
-        SwapTx calldata swapTokenA,
-        SwapTx calldata swapTokenB,
-        address to
-    ) internal returns (uint256 amountTo) {
-        (address routerSwapA, ) = getSupportedDEX(swapTokenA.dexIndex);
-        (address routerSwapB, ) = getSupportedDEX(swapTokenB.dexIndex);
-
-        if (swapTokenA.path[swapTokenA.path.length - 1] == address(0)) {
-            // set target token for native currency wrapper instead of address(0x00)
-            address[] memory pathA = swapTokenA.path;
-            address[] memory pathB = swapTokenB.path;
-            pathA[pathA.length - 1] = nativeCurrencyWrapper;
-            pathB[pathB.length - 1] = nativeCurrencyWrapper;
-
-            return
-                amountTo =
-                    _swapExactTokensForTokens(amountA, swapTokenA.amountMin, pathA, to, routerSwapA) +
-                    _swapExactTokensForTokens(amountB, swapTokenB.amountMin, pathB, to, routerSwapB);
-        }
-
-        amountTo =
-            _swapExactTokensForTokens(amountA, swapTokenA.amountMin, swapTokenA.path, to, routerSwapA) +
-            _swapExactTokensForTokens(amountB, swapTokenB.amountMin, swapTokenB.path, to, routerSwapB);
     }
 }
