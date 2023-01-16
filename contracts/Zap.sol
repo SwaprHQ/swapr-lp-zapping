@@ -17,7 +17,6 @@ error InvalidPair();
 error InvalidStartPath();
 error InvalidTargetPath();
 error OnlyFeeSetter();
-error ZeroAddressInput();
 error InvalidRouterOrFactory();
 error DexIndexAlreadyUsed();
 
@@ -225,19 +224,8 @@ contract Zap is Ownable, ReentrancyGuard {
         address _factory
     ) external onlyOwner {
         if (supportedDEXs[_dexIndex].router != address(0)) revert DexIndexAlreadyUsed();
-        if (_router == address(0) || _factory == address(0)) revert ZeroAddressInput();
         if (_factory != IDXswapRouter(_router).factory()) revert InvalidRouterOrFactory();
         supportedDEXs[_dexIndex] = DEX({name: _name, router: _router, factory: _factory});
-    }
-
-    /** 
-    @notice Remove DEX's info which can be used for zap tx
-    @param _dexIndex Index of the DEX not supported anymore by the contract
-    */
-    function removeSupportedDEX(uint8 _dexIndex) external onlyOwner {
-        supportedDEXs[_dexIndex].router = address(0);
-        supportedDEXs[_dexIndex].factory = address(0);
-        supportedDEXs[_dexIndex].name = '';
     }
 
     /** 

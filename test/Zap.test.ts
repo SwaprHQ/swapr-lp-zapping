@@ -173,12 +173,6 @@ describe.only("Zap", function () {
         zap.connect(owner).setSupportedDEX(dexIndex3, 'dex3', dex3Router.address, dex3Factory.address, overrides)
       ).to.be.revertedWith('DexIndexAlreadyUsed()')
       await expect(
-        zap.connect(owner).setSupportedDEX(BigNumber.from(10), 'dex3', AddressZero, dex3Factory.address, overrides)
-      ).to.be.revertedWith('ZeroAddressInput()')
-      await expect(
-        zap.connect(owner).setSupportedDEX(BigNumber.from(12), 'dex3', dex3Router.address, AddressZero, overrides)
-      ).to.be.revertedWith('ZeroAddressInput()')
-      await expect(
         zap.connect(owner).setSupportedDEX(BigNumber.from(6), 'dex3', dex3Router.address, dex2Factory.address, overrides)
       ).to.be.revertedWith('InvalidRouterOrFactory()')
 
@@ -200,25 +194,6 @@ describe.only("Zap", function () {
       ).to.be.equal(dex2Router.address)
       expect((await zap.connect(impersonated).supportedDEXs(dexIndex3)).name
       ).to.be.equal('dex3')
-    })
-    it("Remove supported dex", async function () {
-      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).factory
-      ).to.be.equal(dxswapFactory.address)
-      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).router
-      ).to.be.equal(dxswapRouter.address)
-      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).name
-      ).to.be.equal('Swapr')
-
-      await expect( zap.connect(impersonated).removeSupportedDEX(dexIndex1, overrides))
-      .to.be.revertedWith("OnlyOwner()")
-      await zap.connect(owner).removeSupportedDEX(dexIndex1, overrides)
-      
-      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).factory
-      ).to.be.equal(AddressZero)
-      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).router
-      ).to.be.equal(AddressZero)
-      expect((await zap.connect(impersonated).supportedDEXs(dexIndex1)).name
-      ).to.be.equal('')
     })
   })
 
