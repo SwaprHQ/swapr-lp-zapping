@@ -308,7 +308,7 @@ contract Zap is Ownable, ReentrancyGuard {
     /** 
     @notice Pause the contract
     */
-    function toggleContractActive() public onlyOwner {
+    function toggleContractActive() external onlyOwner {
         stopped = !stopped;
     }
 
