@@ -132,7 +132,8 @@ describe.only("Zap", function () {
           {amount: zeroBN, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
           impersonated.address,
           impersonated.address, 
-          true
+          zeroBN,
+          zeroBN
           )
       ).to.be.revertedWith("InvalidInputAmount()")
           
@@ -143,7 +144,8 @@ describe.only("Zap", function () {
           {amount: zeroBN, amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
           impersonated.address, 
           impersonated.address, 
-          true,
+          zeroBN,
+          zeroBN,
           {value: zeroBN, gasLimit: 9999999}
           )
       ).to.be.revertedWith("InvalidInputAmount()")
@@ -155,7 +157,8 @@ describe.only("Zap", function () {
           {amount: amountIn, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
           impersonated.address,
           impersonated.address, 
-          true
+          zeroBN,
+          zeroBN
           )
       ).to.be.revertedWith("InvalidStartPath()")
 
@@ -293,7 +296,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         randomSigner.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -319,7 +323,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -350,7 +355,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address] , dexIndex: dexIndex1}, 
         impersonated.address, 
         randomSigner.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -379,7 +385,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -406,7 +413,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WXDAI.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -433,7 +441,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -448,7 +457,7 @@ describe.only("Zap", function () {
       .withArgs(impersonated.address, impersonated.address,WXDAI.address, totalAmount, cowWeth.address, lpBought)
     })
 
-    it("zap in native currency (xdai) token to cow/weth", async function () {
+    it("zap in native currency (xdai) token to cow/weth with residual transfer", async function () {
       const totalAmount = ethers.utils.parseEther("1")
       const nativeCurrencyBalanceInit = await impersonated.getBalance()
       expect(nativeCurrencyBalanceInit).to.be.above(0)
@@ -463,7 +472,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: totalAmount, gasLimit: 9999999}
       )
       
@@ -474,12 +484,102 @@ describe.only("Zap", function () {
       
       expect(lpBought).to.be.above(0)
       expect(nativeCurrencyBalanceInit).to.be.above(nativeCurrencyBalance)
-
       
       await expect(txZapIn).to.emit(zap, "ZapIn")
       .withArgs(impersonated.address, impersonated.address,AddressZero, totalAmount, cowWeth.address, lpBought)
+
+      // Get transfer event data
+      const receipt = await ethers.provider.getTransactionReceipt(txZapIn.hash)
+      const interfaceEvent = new ethers.utils.Interface(["event Transfer(address indexed from, address indexed to, uint256 amount)"])
+
+      // Search WETH Transfer event
+      let wethTransferIndex = -1;
+      for (let i = 0; i < receipt.logs.length; i++) {
+        if (receipt.logs[i].address.toLowerCase() == WETH.address.toLowerCase()) {
+          // Test we got a transfer back from token A residuals
+          let data = receipt.logs[i].data
+          let topics = receipt.logs[i].topics
+          let event;
+          try {
+            event = interfaceEvent.decodeEventLog("Transfer", data, topics)
+          } catch {
+            continue
+          }
+          
+          if (event.from.toLowerCase() == zap.address.toLowerCase() 
+              && event.to.toLowerCase() == impersonated.address.toLowerCase()) {
+            wethTransferIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (wethTransferIndex === -1) {
+        expect("").to.be.equal("Missing residual token transfer")
+      }
     })
 
+    it("zap in native currency (xdai) token to cow/weth without residual transfer", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const nativeCurrencyBalanceInit = await impersonated.getBalance()
+      expect(nativeCurrencyBalanceInit).to.be.above(0)
+      
+      const lpBalanceInit = await cowWeth.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await WXDAI.balanceOf(impersonated.address)
+      
+      await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[AddressZero, WETH.address, COW.address] , dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
+        impersonated.address, 
+        impersonated.address, 
+        zeroBN,
+        BigNumber.from("9999999999999999999999999"),
+        {value: totalAmount, gasLimit: 9999999}
+      )
+      
+      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
+      const lpBalance = await cowWeth.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+      const nativeCurrencyBalance = await impersonated.getBalance()
+      
+      expect(lpBought).to.be.above(0)
+      expect(nativeCurrencyBalanceInit).to.be.above(nativeCurrencyBalance)
+      
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, impersonated.address,AddressZero, totalAmount, cowWeth.address, lpBought)
+
+      // Get transfer event data
+      const receipt = await ethers.provider.getTransactionReceipt(txZapIn.hash)
+      const interfaceEvent = new ethers.utils.Interface(["event Transfer(address indexed from, address indexed to, uint256 amount)"])
+
+      // Search WETH Transfer event
+      let wethTransferIndex = -1;
+      for (let i = 0; i < receipt.logs.length; i++) {
+        if (receipt.logs[i].address.toLowerCase() == WETH.address.toLowerCase()) {
+          // Test we got a transfer back from token A residuals
+          let data = receipt.logs[i].data
+          let topics = receipt.logs[i].topics
+          let event;
+          try {
+            event = interfaceEvent.decodeEventLog("Transfer", data, topics)
+          } catch {
+            continue
+          }
+          
+          if (event.from.toLowerCase() == zap.address.toLowerCase() 
+              && event.to.toLowerCase() == impersonated.address.toLowerCase()) {
+            wethTransferIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (wethTransferIndex !== -1) {
+        expect("").to.be.equal("Residual token transfer done")
+      }
+    })
   })
 
   describe("Zap Out", function () {
@@ -495,7 +595,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address] , dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -545,7 +646,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WXDAI.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -593,7 +695,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -644,7 +747,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: totalAmount, gasLimit: 9999999}
       )
          
@@ -696,7 +800,8 @@ describe.only("Zap", function () {
         {amount: totalAmount.div(2), amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: totalAmount, gasLimit: 9999999}
       )
          
@@ -754,7 +859,8 @@ describe.only("Zap", function () {
         {amount: amountB, amountMin: zeroBN, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
@@ -786,7 +892,8 @@ describe.only("Zap", function () {
         {amount: amountB, amountMin: zeroBN, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
         impersonated.address, 
         impersonated.address, 
-        true,
+        zeroBN,
+        zeroBN,
         {value: zeroBN, gasLimit: 9999999}
       )
       
