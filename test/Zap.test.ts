@@ -365,6 +365,37 @@ describe.only("Zap", function () {
       expect(zapTokenBalance).to.be.eq(zapFeeTaken.add(affliateTaken))
     })
 
+    it("zap in protocol fee on & address is not whitelisted & affiliate on but deadline passed", async function () {
+      const totalAmount = ethers.utils.parseEther("1")
+      const affliateFee = BigNumber.from(30)
+      await zap.setAffiliateData(randomSigner.address, affliateFee, BigNumber.from(Math.floor(Date.now() / 1000) - 60 * 60))
+
+      const protocolFeeForZap = await zap.protocolFee()
+      expect(protocolFeeForZap).to.be.above(0)
+
+      // unlist user to check if protocol fee was taken
+      await zap.setFeeWhitelist(impersonated.address, false)
+      expect(await zap.feeWhitelist(impersonated.address)).to.eq(false)
+      
+      await DXD.connect(impersonated).approve(zap.address, totalAmount)
+      await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex1},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [DXD.address, WETH.address], dexIndex: dexIndex1}, 
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[DXD.address] , dexIndex: dexIndex1}, 
+        impersonated.address, 
+        randomSigner.address, 
+        true,
+        {value: zeroBN, gasLimit: 9999999}
+      )
+      
+      const zapTokenBalance = await DXD.balanceOf(zap.address)
+      const zapFeeTaken = (totalAmount.mul(protocolFeeForZap)).div(BigNumber.from(10000))
+      
+      const affliateBalance = await zap.affiliateBalance(randomSigner.address, DXD.address)
+      expect(affliateBalance).to.be.eq(0)
+      expect(zapTokenBalance).to.be.eq(zapFeeTaken)
+    })
+
 
   })
 
