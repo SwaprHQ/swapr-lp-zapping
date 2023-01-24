@@ -127,7 +127,8 @@ contract Zap is Ownable, ReentrancyGuard {
     @param swapTokenB Data for swap tx pool's token B - amounts, path & DEX
     @param receiver LP token receiver address
     @param affiliate Affiliate address
-    @param transferResidual Set false to save gas by donating the residual remaining after a ZapTx
+    @param transferResidualMinTokenA Set mimimum amount of token A transfer back any residual amount, otherwise donated to contract
+    @param transferResidualMinTokenB Set mimimum amount of token B transfer back any residual amount, otherwise donated to contract
     @return lpBought Amount of LP tokens transferred to receiver 
     @return lpToken LP token address
      */
@@ -137,7 +138,8 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenB,
         address receiver,
         address affiliate,
-        bool transferResidual
+        uint256 transferResidualMinTokenA,
+        uint256 transferResidualMinTokenB
     ) external payable nonReentrant stopInEmergency returns (uint256 lpBought, address lpToken) {
         // check if start token is the same for both paths
         if (swapTokenA.path[0] != swapTokenB.path[0]) revert InvalidStartPath();
@@ -149,7 +151,8 @@ contract Zap is Ownable, ReentrancyGuard {
             swapTokenA,
             swapTokenB,
             zap,
-            transferResidual
+            transferResidualMinTokenA,
+            transferResidualMinTokenB
         );
 
         if (lpBought < zap.amountLPMin) revert InsufficientMinAmount();
@@ -332,7 +335,8 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB,
         ZapInTx calldata zap,
-        bool transferResidual
+        uint256 transferResidualMinTokenA,
+        uint256 transferResidualMinTokenB
     ) internal returns (uint256 liquidity, address lpToken) {
         // check if dex address is valid and supported
         (address router, address factory) = getSupportedDEX(zap.dexIndex);
@@ -357,7 +361,8 @@ contract Zap is Ownable, ReentrancyGuard {
             swapTokenA.amountMin,
             swapTokenB.amountMin,
             router,
-            transferResidual
+            transferResidualMinTokenA,
+            transferResidualMinTokenB
         );
     }
 
@@ -586,7 +591,8 @@ contract Zap is Ownable, ReentrancyGuard {
     @param amountAMin The minimum amount of token A to receive
     @param amountBMin The minimum amount of token A to receive
     @param router The address of platform's router
-    @param transferResidual Set false to save gas by donating the residual remaining after a ZapTx
+    @param transferResidualMinTokenA Set mimimum amount of token A transfer back any residual amount, otherwise donated to contract
+    @param transferResidualMinTokenB Set mimimum amount of token B transfer back any residual amount, otherwise donated to contract
     @return amountA Token A amount added to LP
     @return amountB Token B amount added to LP
     @return liquidity LP tokens minted
@@ -599,7 +605,8 @@ contract Zap is Ownable, ReentrancyGuard {
         uint256 amountAMin,
         uint256 amountBMin,
         address router,
-        bool transferResidual
+        uint256 transferResidualMinTokenA,
+        uint256 transferResidualMinTokenB
     ) internal returns (uint256 amountA, uint256 amountB, uint256 liquidity) {
         _approveTokenIfNeeded(tokenA, amountADesired, router);
         _approveTokenIfNeeded(tokenB, amountBDesired, router);
@@ -615,16 +622,16 @@ contract Zap is Ownable, ReentrancyGuard {
             deadline
         );
 
-        if (transferResidual) {
-            // returning residue in tokenA, if any
-            if (amountADesired - amountA > 0) {
-                TransferHelper.safeTransfer(tokenA, msg.sender, (amountADesired - amountA));
-            }
+        uint256 residualTokenA = amountADesired - amountA;
+        // returning residue in tokenA, if any
+        if (residualTokenA > transferResidualMinTokenA) {
+            TransferHelper.safeTransfer(tokenA, msg.sender, residualTokenA);
+        }
 
-            // returning residue in tokenB, if any
-            if (amountBDesired - amountB > 0) {
-                TransferHelper.safeTransfer(tokenB, msg.sender, (amountBDesired - amountB));
-            }
+        uint256 residualTokenB = amountBDesired - amountB;
+        // returning residue in tokenB, if any
+        if (residualTokenB > transferResidualMinTokenB) {
+            TransferHelper.safeTransfer(tokenB, msg.sender, residualTokenB);
         }
     }
 
