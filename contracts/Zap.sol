@@ -624,13 +624,13 @@ contract Zap is Ownable, ReentrancyGuard {
 
         uint256 residualTokenA = amountADesired - amountA;
         // returning residue in tokenA, if any
-        if (residualTokenA > 0 && residualTokenA >= transferResidualMinTokenA) {
+        if (residualTokenA > transferResidualMinTokenA) {
             TransferHelper.safeTransfer(tokenA, msg.sender, residualTokenA);
         }
 
         uint256 residualTokenB = amountBDesired - amountB;
         // returning residue in tokenB, if any
-        if (residualTokenB > 0 && residualTokenB >= transferResidualMinTokenB) {
+        if (residualTokenB > transferResidualMinTokenB) {
             TransferHelper.safeTransfer(tokenB, msg.sender, residualTokenB);
         }
     }
