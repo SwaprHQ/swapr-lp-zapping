@@ -2,15 +2,25 @@
 import { ethers, network, waffle } from "hardhat"
 import { expect } from "chai"
 import { BigNumber, constants, ContractTransaction } from "ethers"
-import { UniswapV2Factory, UniswapV2Router02, DXswapFactory, DXswapPair, DXswapRouter, ERC20, IERC20, WETH9, WXDAI, Zap, UniswapV2Pair } from "../typechain"
+import {
+  Zap,
+  ERC20,
+  WETH9,
+  WXDAI,
+  TetherToken,
+  DXswapPair,
+  DXswapRouter,
+  DXswapFactory,
+  UniswapV2Pair,
+  UniswapV2Factory,
+  UniswapV2Router02
+} from "../typechain"
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers"
 import { dxswapFixture } from "./shared/fixtures"
 import { Address } from "hardhat-deploy/types"
-import { calculateAmountsOut } from "./shared/utilities"
 
 const amountIn = ethers.utils.parseEther("1")
-const { AddressZero, MaxUint256 } = constants
-const dexIndex0 = BigNumber.from(0)
+const { AddressZero } = constants
 const dexIndex1 = BigNumber.from(1)
 const dexIndex2 = BigNumber.from(2)
 const dexIndex3 = BigNumber.from(3)
@@ -25,6 +35,7 @@ const ROUND_EXCEPTION = BigNumber.from(10).pow(4)
 const zeroBN = BigNumber.from(0)
 
 const USER_ACCOUNT = "0xe716EC63C5673B3a4732D22909b38d779fa47c3F" //dao avatar as example user
+const RANDOM_TETHER_HOLDER = "0x7f90122BF0700F9E7e1F688fe926940E8839F353"
 
 describe.only("Zap", function () {
   let zap: Zap
@@ -44,6 +55,8 @@ describe.only("Zap", function () {
   let DXD: ERC20
   let SWPR: ERC20
   let COW: ERC20
+  let USDT: TetherToken
+  let USDT_IMPLEMENTATION_ADDRESS: Address
 
   let wethXdai: DXswapPair
   let swprXdai: DXswapPair
@@ -53,6 +66,8 @@ describe.only("Zap", function () {
   let dxdWeth: DXswapPair
   let cowWeth: DXswapPair
   let wxdaiWeth: UniswapV2Pair
+  let usdtWeth: UniswapV2Pair
+  let usdtWethDex2: DXswapPair
 
   let wethGnoDex3: DXswapPair
 
@@ -63,6 +78,7 @@ describe.only("Zap", function () {
   let impersonated: SignerWithAddress
   let feeSetter: SignerWithAddress
   let randomSigner: SignerWithAddress
+  let tetherHolder: SignerWithAddress
   let FEE_TO_SETTER: Address
 
   beforeEach('assign wallets', async function () {
@@ -91,6 +107,8 @@ describe.only("Zap", function () {
     DXD = fixture.DXD
     SWPR = fixture.SWPR
     COW = fixture.COW
+    USDT = fixture.USDT
+    USDT_IMPLEMENTATION_ADDRESS = fixture.USDT_IMPLEMENTATION_ADDRESS
     
     wethXdai = fixture.wethXdai
     swprXdai = fixture.swprXdai
@@ -100,6 +118,8 @@ describe.only("Zap", function () {
     dxdWeth = fixture.dxdWeth
     cowWeth = fixture.cowWeth
     wxdaiWeth = fixture.wxdaiWeth
+    usdtWeth = fixture.usdtWeth
+    usdtWethDex2 = fixture.usdtWethDex2
 
     wethGnoDex3 = fixture.wethGnoDex3
 
@@ -115,11 +135,24 @@ describe.only("Zap", function () {
       method: "hardhat_impersonateAccount",
       params: [FEE_TO_SETTER],
     });
+    await network.provider.request({
+      method: "hardhat_impersonateAccount",
+      params: [RANDOM_TETHER_HOLDER],
+    })
 
     impersonated = await ethers.getSigner(USER_ACCOUNT)
     feeSetter = await ethers.getSigner(FEE_TO_SETTER)
+    tetherHolder = await ethers.getSigner(RANDOM_TETHER_HOLDER)
+
     // set fee setter account balance to 100 ETH
     await network.provider.send("hardhat_setBalance", [FEE_TO_SETTER, "0x56bc75e2d63100000"])
+
+    // send some tokens to address for gas fees
+    await network.provider.send("hardhat_setBalance", [tetherHolder.address, "0x56bc75e2d63100000"])
+
+    // replace proxy USDT with the actual contract bytecode
+    const bytecode = await network.provider.send("eth_getCode", [USDT_IMPLEMENTATION_ADDRESS])
+    await network.provider.send("hardhat_setCode", [USDT_IMPLEMENTATION_ADDRESS, bytecode])
   })
 
   this.beforeEach('set supported dexs', async function () {
@@ -254,7 +287,7 @@ describe.only("Zap", function () {
   describe("Protocol fee", function () {
     it("initial addresses", async function () {
       expect(await zap.feeTo()).to.eq(AddressZero)
-      expect((await zap.feeToSetter()).toLowerCase()).to.eq(FEE_TO_SETTER)
+      expect((await zap.feeToSetter())).to.eq(FEE_TO_SETTER)
       expect(await zap.protocolFee()).to.eq(50)
     })
     it("revert if caller is not owner", async function () {
@@ -995,24 +1028,24 @@ describe.only("Zap", function () {
       const totalAmount = amountA.add(amountB)
       const lpBalanceInit = await wethGnoDex3.balanceOf(impersonated.address)
       const tokenInBalanceInit = await WXDAI.balanceOf(impersonated.address)
-      
+
       await WXDAI.connect(impersonated).approve(zap.address, totalAmount)
       const txZapIn = await zap.connect(impersonated).zapIn(
         {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3},
-        {amount: amountA, amountMin: zeroBN, path:[WXDAI.address, WETH.address] , dexIndex: dexIndex2}, 
-        {amount: amountB, amountMin: zeroBN, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1}, 
-        impersonated.address, 
-        impersonated.address, 
+        {amount: amountA, amountMin: zeroBN, path:[WXDAI.address, WETH.address] , dexIndex: dexIndex2},
+        {amount: amountB, amountMin: zeroBN, path: [WXDAI.address, GNO.address], dexIndex: dexIndex1},
+        impersonated.address,
+        impersonated.address,
         true,
         {value: zeroBN, gasLimit: 9999999}
       )
-      
-      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)      
+
+      const tokenInBalance = await WXDAI.balanceOf(impersonated.address)
       let lpBalance = await wethGnoDex3.balanceOf(impersonated.address)
       const lpBought = lpBalance.sub(lpBalanceInit)
 
       const { amountTo } = await getTxData(txZapIn, "ZapIn")
-      
+
       expect(lpBought).to.be.above(0)
       expect(lpBought).to.be.eq(amountTo)
       expect(tokenInBalanceInit).to.be.above(tokenInBalance)
@@ -1043,6 +1076,72 @@ describe.only("Zap", function () {
       expect(lpBalance).to.be.eq(lpBalanceInit)
       await expect(txZapOut).to.emit(zap, "ZapOut")
       .withArgs(impersonated.address, impersonated.address,wethGnoDex3.address, lpBought, COW.address, eventAmountTo)
+    })
+  })
+
+  describe("tether token", function () {
+    it("zap in usdt token to usdt/weth", async function () {
+      // Send some USDT to the user to start with
+      await USDT.connect(tetherHolder).transfer(impersonated.address, BigNumber.from("10000000000"))
+
+      const totalAmount = BigNumber.from("10000000000")
+      const lpBalanceInit = await usdtWethDex2.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await USDT.balanceOf(impersonated.address)
+
+      await USDT.connect(impersonated).approve(zap.address, 0)
+      await USDT.connect(impersonated).approve(zap.address, totalAmount)
+
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex2},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[USDT.address], dexIndex: dexIndex2},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [USDT.address, WETH.address], dexIndex: dexIndex2},
+        impersonated.address,
+        impersonated.address,
+        false,
+        {value: zeroBN, gasLimit: 9999999}
+      )
+
+      const tokenInBalance = await USDT.balanceOf(impersonated.address)
+      const lpBalance = await usdtWethDex2.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+
+      expect(lpBought).to.be.above(0)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, impersonated.address, USDT.address, totalAmount, usdtWeth.address, lpBought)
+    })
+
+    it("zap in usdt token to wxdai/weth", async function () {
+      // Send some USDT to the user to start with
+      await USDT.connect(tetherHolder).transfer(impersonated.address, BigNumber.from("10000000000"))
+
+      const totalAmount = BigNumber.from("10000000000")
+      const lpBalanceInit = await wxdaiWeth.balanceOf(impersonated.address)
+      const tokenInBalanceInit = await USDT.balanceOf(impersonated.address)
+
+      await USDT.connect(impersonated).approve(zap.address, 0)
+      await USDT.connect(impersonated).approve(zap.address, totalAmount)
+
+      const txZapIn = await zap.connect(impersonated).zapIn(
+        {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex2},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path:[USDT.address, WETH.address, WXDAI.address] , dexIndex: dexIndex2},
+        {amount: totalAmount.div(2), amountMin: zeroBN, path: [USDT.address, WETH.address], dexIndex: dexIndex2},
+        impersonated.address,
+        impersonated.address,
+        false,
+        {value: zeroBN, gasLimit: 9999999}
+      )
+
+      const tokenInBalance = await USDT.balanceOf(impersonated.address)
+      const lpBalance = await wxdaiWeth.balanceOf(impersonated.address)
+      const lpBought = lpBalance.sub(lpBalanceInit)
+
+      expect(lpBought).to.be.above(0)
+      expect(tokenInBalanceInit).to.be.above(tokenInBalance)
+
+      await expect(txZapIn).to.emit(zap, "ZapIn")
+      .withArgs(impersonated.address, impersonated.address, USDT.address, totalAmount, wxdaiWeth.address, lpBought)
     })
   })
 
