@@ -48,7 +48,8 @@ struct ZapOutTx {
 }
 
 struct AffiliateData {
-    uint16 fee;
+    uint16 protocolFee; // overrides global fee
+    uint16 affiliateFee;
     uint256 deadline;
 }
 
@@ -206,11 +207,12 @@ contract Zap is Ownable, ReentrancyGuard {
     @param _newAffiliateFee The new fee for the affiliate
     @param _newAffiliateDeadline The new deadline for the affiliate 
     */
-    function setAffiliateData(address _affiliate, uint16 _newAffiliateFee, uint256 _newAffiliateDeadline) external onlyOwner {
+    function setAffiliateData(address _affiliate, uint16 _newAffiliateFee, uint16 _newProtocolFee, uint256 _newAffiliateDeadline) external onlyOwner {
         if (_newAffiliateFee > protocolFee) revert ForbiddenValue();
 
         AffiliateData storage affiliateData = affiliates[_affiliate];
-        affiliateData.fee = _newAffiliateFee;
+        affiliateData.affiliateFee = _newAffiliateFee;
+        affiliateData.protocolFee = _newProtocolFee;
         affiliateData.deadline = _newAffiliateDeadline;
     }
 
@@ -465,17 +467,23 @@ contract Zap is Ownable, ReentrancyGuard {
         address affiliate
     ) internal returns (uint256 totalProtocolFeePortion) {
         bool whitelisted = feeWhitelist[msg.sender];
-        if (!whitelisted && protocolFee > 0) {
-            totalProtocolFeePortion = (amount * protocolFee) / 10000;
-
-            AffiliateData storage affiliateData = affiliates[affiliate];
-            if (affiliateData.fee > 0 && affiliateData.deadline > block.timestamp) {
-                uint256 affiliatePortion = (amount * affiliateData.fee) / 10000;
-                affiliateBalance[affiliate][token] += affiliatePortion;
-                totalAffiliateBalance[token] += affiliatePortion;
-                totalProtocolFeePortion += affiliatePortion;
-            }
+        if (whitelisted) {
+            return 0;
         }
+        
+        AffiliateData storage affiliateData = affiliates[affiliate];
+        if (affiliateData.affiliateFee > 0 && affiliateData.deadline > block.timestamp) {
+            totalProtocolFeePortion = (amount * affiliateData.protocolFee) / 10000;
+
+            uint256 affiliatePortion = (amount * affiliateData.affiliateFee) / 10000;
+            affiliateBalance[affiliate][token] += affiliatePortion;
+            totalAffiliateBalance[token] += affiliatePortion;
+            totalProtocolFeePortion += affiliatePortion;
+
+            return totalProtocolFeePortion;
+        }
+
+        totalProtocolFeePortion = (amount * protocolFee) / 10000;
     }
 
     /** 

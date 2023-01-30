@@ -188,7 +188,7 @@ describe.only("Zap", function () {
 
       // affiliate fee can't be higher than protocol fee
       await expect(
-        zap.connect(owner).setAffiliateData(impersonated.address, BigNumber.from(100), BigNumber.from(0))
+        zap.connect(owner).setAffiliateData(impersonated.address, BigNumber.from(100), BigNumber.from(100), BigNumber.from(0))
       ).to.be.revertedWith("ForbiddenValue()")
     })
   })
@@ -272,15 +272,15 @@ describe.only("Zap", function () {
       const _newAffliateSplit = BigNumber.from(20)
 
       let affiliateData = await zap.affiliates(impersonated.address);
-      expect(affiliateData["fee"]).to.eq(0)
+      expect(affiliateData["affiliateFee"]).to.eq(0)
 
-      await zap.setAffiliateData(impersonated.address, _newAffliateSplit, BigNumber.from(0))
+      await zap.setAffiliateData(impersonated.address, _newAffliateSplit, BigNumber.from(20), BigNumber.from(0))
       affiliateData = await zap.affiliates(impersonated.address);
-      expect(affiliateData["fee"]).to.eq(_newAffliateSplit)
+      expect(affiliateData["affiliateFee"]).to.eq(_newAffliateSplit)
     })
 
     it("revert ownable setAffliateData", async function () {
-      await expect(zap.connect(randomSigner).setAffiliateData(impersonated.address,BigNumber.from(2000),BigNumber.from(0))).to.be.revertedWith('OnlyOwner()')
+      await expect(zap.connect(randomSigner).setAffiliateData(impersonated.address,BigNumber.from(2000), BigNumber.from(20),BigNumber.from(0))).to.be.revertedWith('OnlyOwner()')
     })
 
     it("zap in protocol fee on & address is not whitelisted", async function () {
@@ -336,7 +336,8 @@ describe.only("Zap", function () {
     it("zap in protocol fee on & address is not whitelisted & affiliate on", async function () {
       const totalAmount = ethers.utils.parseEther("1")
       const affliateFee = BigNumber.from(30)
-      await zap.setAffiliateData(randomSigner.address, affliateFee, BigNumber.from(Math.floor(Date.now() / 1000) + 60 * 60))
+      const protocolFee = BigNumber.from(50)
+      await zap.setAffiliateData(randomSigner.address, affliateFee, protocolFee, BigNumber.from(Math.floor(Date.now() / 1000) + 60 * 60))
 
       const protocolFeeForZap = await zap.protocolFee()
       expect(protocolFeeForZap).to.be.above(0)
@@ -368,7 +369,8 @@ describe.only("Zap", function () {
     it("zap in protocol fee on & address is not whitelisted & affiliate on but deadline passed", async function () {
       const totalAmount = ethers.utils.parseEther("1")
       const affliateFee = BigNumber.from(30)
-      await zap.setAffiliateData(randomSigner.address, affliateFee, BigNumber.from(Math.floor(Date.now() / 1000) - 60 * 60))
+      const protocolFee = BigNumber.from(50)
+      await zap.setAffiliateData(randomSigner.address, affliateFee, protocolFee, BigNumber.from(Math.floor(Date.now() / 1000) - 60 * 60))
 
       const protocolFeeForZap = await zap.protocolFee()
       expect(protocolFeeForZap).to.be.above(0)
