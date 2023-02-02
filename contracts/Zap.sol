@@ -47,6 +47,12 @@ struct ZapOutTx {
     uint8 dexIndex;
 }
 
+struct AffiliateData {
+    uint16 protocolFee; // overrides global fee
+    uint16 affiliateFee;
+    uint256 deadline;
+}
+
 /**  
 @title Zap
 @notice Allows to zapIn from an ERC20 or native currency to ERC20 pair
@@ -56,17 +62,16 @@ and zapOut from an ERC20 pair to an ERC20 or native currency
 contract Zap is Ownable, ReentrancyGuard {
     bool public stopped = false; // pause the contract if emergency
     uint16 public protocolFee = 50; // default 0.5% of zap amount protocol fee (range: 0-10000)
-    uint16 public affiliateSplit; // % share of protocol fee 0-100 % (range: 0-10000)
     address public feeTo;
     address public feeToSetter;
     address public immutable nativeCurrencyWrapper;
 
     // set list of supported DEXs for zap
     mapping(uint8 => DEX) public supportedDEXs;
-    // if true, protocol fee is not deducted
+    // if true, protocol fee nor affiliate fee is not deducted
     mapping(address => bool) public feeWhitelist;
     // restrict affiliates
-    mapping(address => bool) public affiliates;
+    mapping(address => AffiliateData) public affiliates;
     // affiliate => token => amount
     mapping(address => mapping(address => uint256)) public affiliateBalance;
     // token => amount
@@ -197,18 +202,18 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice Set new affiliate split value
+    @notice Set new fee and deadline for a specific affiliate
+    @param _affiliate The address of the affiliate to update
+    @param _newAffiliateFee The new fee for the affiliate
+    @param _newAffiliateDeadline The new deadline for the affiliate 
     */
-    function setNewAffiliateSplit(uint16 _newAffiliateSplit) external onlyOwner {
-        if (_newAffiliateSplit > 10000) revert ForbiddenValue();
-        affiliateSplit = _newAffiliateSplit;
-    }
+    function setAffiliateData(address _affiliate, uint16 _newAffiliateFee, uint16 _newProtocolFee, uint256 _newAffiliateDeadline) external onlyOwner {
+        if (_newAffiliateFee > protocolFee) revert ForbiddenValue();
 
-    /** 
-    @notice Set new affiliate status for specified address
-    */
-    function setAffiliateStatus(address _affiliate, bool _status) external onlyOwner {
-        affiliates[_affiliate] = _status;
+        AffiliateData storage affiliateData = affiliates[_affiliate];
+        affiliateData.affiliateFee = _newAffiliateFee;
+        affiliateData.protocolFee = _newProtocolFee;
+        affiliateData.deadline = _newAffiliateDeadline;
     }
 
     /** 
@@ -457,20 +462,28 @@ contract Zap is Ownable, ReentrancyGuard {
     @return totalProtocolFeePortion Total amount of protocol fee taken
     */
     function _subtractProtocolFee(
-        address token,
-        uint256 amount,
+        address token, 
+        uint256 amount, 
         address affiliate
     ) internal returns (uint256 totalProtocolFeePortion) {
         bool whitelisted = feeWhitelist[msg.sender];
-        if (!whitelisted && protocolFee > 0) {
-            totalProtocolFeePortion = (amount * protocolFee) / 10000;
-
-            if (affiliates[affiliate] && affiliateSplit > 0) {
-                uint256 affiliatePortion = (totalProtocolFeePortion * affiliateSplit) / 10000;
-                affiliateBalance[affiliate][token] = affiliateBalance[affiliate][token] + affiliatePortion;
-                totalAffiliateBalance[token] = totalAffiliateBalance[token] + affiliatePortion;
-            }
+        if (whitelisted) {
+            return 0;
         }
+        
+        AffiliateData storage affiliateData = affiliates[affiliate];
+        if (affiliateData.affiliateFee > 0 && affiliateData.deadline > block.timestamp) {
+            totalProtocolFeePortion = (amount * affiliateData.protocolFee) / 10000;
+
+            uint256 affiliatePortion = (amount * affiliateData.affiliateFee) / 10000;
+            affiliateBalance[affiliate][token] += affiliatePortion;
+            totalAffiliateBalance[token] += affiliatePortion;
+            totalProtocolFeePortion += affiliatePortion;
+
+            return totalProtocolFeePortion;
+        }
+
+        totalProtocolFeePortion = (amount * protocolFee) / 10000;
     }
 
     /** 
