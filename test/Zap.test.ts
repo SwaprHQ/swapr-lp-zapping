@@ -286,13 +286,10 @@ describe.only("Zap", function () {
 
   describe("Protocol fee", function () {
     it("initial addresses", async function () {
-      expect(await zap.feeTo()).to.eq(AddressZero)
       expect((await zap.feeToSetter())).to.eq(FEE_TO_SETTER)
       expect(await zap.protocolFee()).to.eq(50)
     })
     it("revert if caller is not owner", async function () {
-      await expect(zap.connect(impersonated).setFeeTo(user.address, overrides))
-      .to.be.revertedWith("OnlyFeeSetter()")
       await expect(zap.connect(impersonated).setFeeToSetter(user.address, overrides))
       .to.be.revertedWith("OnlyFeeSetter()")
       await expect(zap.connect(impersonated).setProtocolFee(100, overrides))
@@ -322,12 +319,10 @@ describe.only("Zap", function () {
     })
     it("set protocol fee", async function () {
       await zap.connect(feeSetter).setProtocolFee(BigNumber.from(100), overrides)
-      await zap.connect(feeSetter).setFeeTo(user.address, overrides)
       await zap.connect(feeSetter).setFeeToSetter(user.address, overrides)
       await zap.connect(user).setFeeToSetter(feeReceiver.address, overrides)
 
       expect(await zap.protocolFee()).to.eq(100)
-      expect((await zap.feeTo()).toLowerCase()).to.eq(user.address.toLowerCase())
       expect((await zap.feeToSetter()).toLowerCase()).to.eq(feeReceiver.address.toLowerCase())
     })
   })

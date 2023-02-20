@@ -57,7 +57,6 @@ contract Zap is Ownable, ReentrancyGuard {
     bool public stopped = false; // pause the contract if emergency
     uint16 public protocolFee = 50; // default 0.5% of zap amount protocol fee (range: 0-10000)
     uint16 public affiliateSplit; // % share of protocol fee 0-100 % (range: 0-10000)
-    address public feeTo;
     address public feeToSetter;
     address public immutable nativeCurrencyWrapper;
 
@@ -239,15 +238,6 @@ contract Zap is Ownable, ReentrancyGuard {
         if (supportedDEXs[_dexIndex].router != address(0)) revert DexIndexAlreadyUsed();
         if (_factory != IDXswapRouter(_router).factory()) revert InvalidRouterOrFactory();
         supportedDEXs[_dexIndex] = DEX({name: _name, router: _router, factory: _factory});
-    }
-
-    /** 
-    @notice Set the fee receiver address
-    @param _feeTo Fee receiver address
-    */
-    function setFeeTo(address _feeTo) external {
-        if (msg.sender != feeToSetter) revert OnlyFeeSetter();
-        feeTo = _feeTo;
     }
 
     /** 
