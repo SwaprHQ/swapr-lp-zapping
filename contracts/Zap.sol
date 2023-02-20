@@ -7,7 +7,6 @@ import {IERC20} from '@swapr/core/contracts/interfaces/IERC20.sol';
 import {IWETH} from '@swapr/core/contracts/interfaces/IWETH.sol';
 import {IDXswapRouter} from '@swapr/periphery/contracts/interfaces/IDXswapRouter.sol';
 import {TransferHelper} from '@swapr/periphery/contracts/libraries/TransferHelper.sol';
-import {ReentrancyGuard} from '@openzeppelin/contracts/security/ReentrancyGuard.sol';
 import {Ownable} from './peripherals/Ownable.sol';
 
 error ForbiddenValue();
@@ -51,7 +50,7 @@ struct ZapOutTx {
 and zapOut from an ERC20 pair to an ERC20 or native currency
 @dev Dusts from zap can be withdrawn by owner
 */
-contract Zap is Ownable, ReentrancyGuard {
+contract Zap is Ownable {
     bool public stopped = false; // pause the contract if emergency
     uint16 public protocolFee = 50; // default 0.5% of zap amount protocol fee (range: 0-10000)
     uint16 public affiliateSplit; // % share of protocol fee 0-100 % (range: 0-10000)
@@ -135,7 +134,7 @@ contract Zap is Ownable, ReentrancyGuard {
         address receiver,
         address affiliate,
         bool transferResidual
-    ) external payable nonReentrant stopInEmergency returns (uint256 lpBought, address lpToken) {
+    ) external payable stopInEmergency returns (uint256 lpBought, address lpToken) {
         // check if start token is the same for both paths
         if (swapTokenA.path[0] != swapTokenB.path[0]) revert InvalidStartPath();
 
@@ -172,7 +171,7 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenB,
         address receiver,
         address affiliate
-    ) external nonReentrant stopInEmergency returns (uint256 amountTransferred, address tokenTo) {
+    ) external stopInEmergency returns (uint256 amountTransferred, address tokenTo) {
         // check if target token is the same for both paths
         if (swapTokenA.path[swapTokenA.path.length - 1] != swapTokenB.path[swapTokenB.path.length - 1])
             revert InvalidTargetPath();
