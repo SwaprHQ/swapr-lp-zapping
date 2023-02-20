@@ -305,17 +305,6 @@ contract Zap is Ownable, ReentrancyGuard {
     }
 
     /** 
-    @notice Check if DEX's address is valid and supported
-    @return router DEX's router address
-    @return factory DEX's factory address
-    */
-    function getSupportedDEX(uint8 _dexIndex) public view returns (address router, address factory) {
-        router = supportedDEXs[_dexIndex].router;
-        factory = supportedDEXs[_dexIndex].factory;
-        if (router == address(0) || factory == address(0)) revert InvalidRouterOrFactory();
-    }
-
-    /** 
     @notice Internal zap in
     */
     function _performZapIn(
@@ -326,8 +315,8 @@ contract Zap is Ownable, ReentrancyGuard {
         ZapInTx calldata zap,
         bool transferResidual
     ) internal returns (uint256 liquidity, address lpToken) {
-        // check if dex address is valid and supported
-        (address router, address factory) = getSupportedDEX(zap.dexIndex);
+        address router = supportedDEXs[zap.dexIndex].router;
+        address factory = supportedDEXs[zap.dexIndex].factory;
 
         lpToken = IDXswapFactory(factory).getPair(
             swapTokenA.path[swapTokenA.path.length - 1],
@@ -361,8 +350,8 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB
     ) internal returns (uint256 amountTo, address lpToken) {
-        // check if dex address is valid and supported
-        (address router, address factory) = getSupportedDEX(zap.dexIndex);
+        address router = supportedDEXs[zap.dexIndex].router;
+        address factory = supportedDEXs[zap.dexIndex].factory;
 
         lpToken = _pullLpTokens(zap.amountLpFrom, swapTokenA.path[0], swapTokenB.path[0], router, factory);
 
@@ -379,8 +368,8 @@ contract Zap is Ownable, ReentrancyGuard {
 
         if (amountA == 0 || amountB == 0) revert InsufficientMinAmount();
 
-        (address routerSwapA, ) = getSupportedDEX(swapTokenA.dexIndex);
-        (address routerSwapB, ) = getSupportedDEX(swapTokenB.dexIndex);
+        address routerSwapA = supportedDEXs[swapTokenA.dexIndex].router;
+        address routerSwapB = supportedDEXs[swapTokenB.dexIndex].router;
 
         if (swapTokenA.path[swapTokenA.path.length - 1] == address(0)) {
             // set target token for native currency wrapper instead of address(0x00)
@@ -492,9 +481,9 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB
     ) internal returns (uint256 tokenABought, uint256 tokenBBought) {
-        //
-        (address routerSwapA, ) = getSupportedDEX(swapTokenA.dexIndex);
-        (address routerSwapB, ) = getSupportedDEX(swapTokenB.dexIndex);
+        address routerSwapA = supportedDEXs[swapTokenA.dexIndex].router;
+        address routerSwapB = supportedDEXs[swapTokenB.dexIndex].router;
+        
         // wrap native currency
         if (swapTokenA.path[0] == address(0)) {
             address[] memory pathA = swapTokenA.path;

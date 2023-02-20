@@ -193,10 +193,6 @@ describe.only("Zap", function () {
       ).to.be.revertedWith('InvalidRouterOrFactory()')
 
       await expect(
-        zap.connect(impersonated).getSupportedDEX(BigNumber.from(81))
-      ).to.be.revertedWith("InvalidRouterOrFactory()")
-
-      await expect(
         zap.connect(owner).setNewAffiliateSplit(BigNumber.from(10001))
       ).to.be.revertedWith("ForbiddenValue()")
     })
