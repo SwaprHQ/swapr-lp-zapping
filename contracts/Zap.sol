@@ -17,7 +17,6 @@ error InvalidStartPath();
 error InvalidTargetPath();
 error OnlyFeeSetter();
 error InvalidRouterOrFactory();
-error DexIndexAlreadyUsed();
 error TemporarilyPaused();
 
 struct DEX {
@@ -236,7 +235,6 @@ contract Zap is Ownable, ReentrancyGuard {
         address _router,
         address _factory
     ) external onlyOwner {
-        if (supportedDEXs[_dexIndex].router != address(0)) revert DexIndexAlreadyUsed();
         if (_factory != IDXswapRouter(_router).factory()) revert InvalidRouterOrFactory();
         supportedDEXs[_dexIndex] = DEX({name: _name, router: _router, factory: _factory});
     }

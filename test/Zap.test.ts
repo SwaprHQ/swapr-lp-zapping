@@ -186,9 +186,6 @@ describe.only("Zap", function () {
       ).to.be.revertedWith("InvalidTargetPath()")
 
       await expect(
-        zap.connect(owner).setSupportedDEX(dexIndex3, 'dex3', dex3Router.address, dex3Factory.address, overrides)
-      ).to.be.revertedWith('DexIndexAlreadyUsed()')
-      await expect(
         zap.connect(owner).setSupportedDEX(BigNumber.from(6), 'dex3', dex3Router.address, dex2Factory.address, overrides)
       ).to.be.revertedWith('InvalidRouterOrFactory()')
 
