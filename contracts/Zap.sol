@@ -512,7 +512,7 @@ contract Zap is Ownable, ReentrancyGuard {
             address[] memory pathA = swapTokenA.path;
             address[] memory pathB = swapTokenB.path;
 
-            IWETH(nativeCurrencyWrapper).deposit{value: amountAToInvest + amountAToInvest}();
+            IWETH(nativeCurrencyWrapper).deposit{value: amountAToInvest + amountBToInvest}();
             // set path to start with native currency wrapper instead of address(0x00)
             pathA[0] = nativeCurrencyWrapper;
             pathB[0] = nativeCurrencyWrapper;
