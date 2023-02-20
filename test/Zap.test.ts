@@ -1190,7 +1190,7 @@ describe.only("Zap", function () {
           impersonated.address, 
           true
           )
-      ).to.be.revertedWith("Temporarily Paused")
+      ).to.be.revertedWith("TemporarilyPaused()")
     })
   })
   

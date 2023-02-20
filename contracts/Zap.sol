@@ -19,6 +19,7 @@ error InvalidTargetPath();
 error OnlyFeeSetter();
 error InvalidRouterOrFactory();
 error DexIndexAlreadyUsed();
+error TemporarilyPaused();
 
 struct DEX {
     string name;
@@ -97,7 +98,7 @@ contract Zap is Ownable, ReentrancyGuard {
     // circuit breaker modifiers
     modifier stopInEmergency() {
         if (stopped) {
-            revert('Temporarily Paused');
+            revert TemporarilyPaused();
         } else {
             _;
         }
