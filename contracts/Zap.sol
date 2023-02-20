@@ -12,7 +12,6 @@ import {Ownable} from './peripherals/Ownable.sol';
 
 error ForbiddenValue();
 error InsufficientMinAmount();
-error InvalidInputAmount();
 error InvalidPair();
 error InvalidStartPath();
 error InvalidTargetPath();
@@ -362,7 +361,6 @@ contract Zap is Ownable, ReentrancyGuard {
         SwapTx calldata swapTokenA,
         SwapTx calldata swapTokenB
     ) internal returns (uint256 amountTo, address lpToken) {
-        if (zap.amountLpFrom == 0) revert InvalidInputAmount();
         // check if dex address is valid and supported
         (address router, address factory) = getSupportedDEX(zap.dexIndex);
 
@@ -418,10 +416,8 @@ contract Zap is Ownable, ReentrancyGuard {
         uint256 totalAmount = swapTokenA.amount + swapTokenB.amount;
 
         if (fromTokenAddress == address(0)) {
-            if (msg.value == 0 || msg.value != totalAmount) revert InvalidInputAmount();
             fromTokenAddress = nativeCurrencyAddress;
         } else {
-            if (msg.value > 0 || totalAmount == 0) revert InvalidInputAmount();
             //transfer tokens to zap contract
             TransferHelper.safeTransferFrom(fromTokenAddress, msg.sender, address(this), totalAmount);
         }

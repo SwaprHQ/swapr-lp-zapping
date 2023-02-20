@@ -164,30 +164,6 @@ describe.only("Zap", function () {
   
   describe("Revert", function () {
     it("revert on zapIn", async function () {
-
-      await expect(
-        zap.connect(impersonated).zapIn(
-          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3}, 
-          {amount: zeroBN, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
-          {amount: zeroBN, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
-          impersonated.address,
-          impersonated.address, 
-          true
-          )
-      ).to.be.revertedWith("InvalidInputAmount()")
-          
-      await expect(
-        zap.connect(impersonated).zapIn(
-          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3}, 
-          {amount: zeroBN, amountMin: zeroBN, path:[AddressZero, GNO.address] , dexIndex: dexIndex1}, 
-          {amount: zeroBN, amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: dexIndex1}, 
-          impersonated.address, 
-          impersonated.address, 
-          true,
-          {value: zeroBN, gasLimit: 9999999}
-          )
-      ).to.be.revertedWith("InvalidInputAmount()")
-
       await expect(
         zap.connect(impersonated).zapIn(
           {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: dexIndex3}, 
@@ -200,14 +176,14 @@ describe.only("Zap", function () {
       ).to.be.revertedWith("InvalidStartPath()")
 
       await expect(
-      zap.connect(impersonated).zapOut(
-        {amountLpFrom: zeroBN, amountTokenToMin: zeroBN, dexIndex: dexIndex3}, 
-        {amount: amountIn, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
-        {amount: amountIn, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
-        impersonated.address,
-        impersonated.address
-        )
-    ).to.be.revertedWith("InvalidTargetPath()")
+        zap.connect(impersonated).zapOut(
+          {amountLpFrom: zeroBN, amountTokenToMin: zeroBN, dexIndex: dexIndex3}, 
+          {amount: amountIn, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: dexIndex1}, 
+          {amount: amountIn, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: dexIndex1}, 
+          impersonated.address,
+          impersonated.address
+          )
+      ).to.be.revertedWith("InvalidTargetPath()")
 
       await expect(
         zap.connect(owner).setSupportedDEX(dexIndex3, 'dex3', dex3Router.address, dex3Factory.address, overrides)
@@ -226,29 +202,6 @@ describe.only("Zap", function () {
     })
 
     it("revert on zapIn - uniswap", async function () {
-
-      await expect(
-        zap.connect(impersonated).zapIn(
-          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4}, 
-          {amount: zeroBN, amountMin: zeroBN, path:[WXDAI.address, GNO.address] , dexIndex: uniswapV2Index4}, 
-          {amount: zeroBN, amountMin: zeroBN, path: [WXDAI.address, WETH.address], dexIndex: uniswapV2Index4}, 
-          impersonated.address,
-          impersonated.address, 
-          true
-          )
-      ).to.be.revertedWith("InvalidInputAmount()")
-          
-      await expect(
-        zap.connect(impersonated).zapIn(
-          {amountAMin: zeroBN, amountBMin: zeroBN, amountLPMin: zeroBN, dexIndex: uniswapV2Index4}, 
-          {amount: zeroBN, amountMin: zeroBN, path:[AddressZero, GNO.address] , dexIndex: uniswapV2Index4}, 
-          {amount: zeroBN, amountMin: zeroBN, path: [AddressZero, WETH.address], dexIndex: uniswapV2Index4}, 
-          impersonated.address, 
-          impersonated.address, 
-          true,
-          {value: zeroBN, gasLimit: 9999999}
-          )
-      ).to.be.revertedWith("InvalidInputAmount()")
 
       await expect(
         zap.connect(impersonated).zapIn(
