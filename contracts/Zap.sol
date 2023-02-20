@@ -187,13 +187,15 @@ contract Zap is Ownable, ReentrancyGuard {
             // unwrap to native currency
             IWETH(nativeCurrencyWrapper).withdraw(amountTo);
             totalProtocolFeePortion = _subtractProtocolFee(nativeCurrencyAddress, amountTo, affiliate);
-            TransferHelper.safeTransferETH(receiver, amountTo - totalProtocolFeePortion);
+
+            amountTransferred = amountTo - totalProtocolFeePortion;
+            TransferHelper.safeTransferETH(receiver, amountTransferred);
         } else {
             totalProtocolFeePortion = _subtractProtocolFee(tokenTo, amountTo, affiliate);
-            TransferHelper.safeTransfer(tokenTo, receiver, amountTo - totalProtocolFeePortion);
-        }
 
-        amountTransferred = amountTo - totalProtocolFeePortion;
+            amountTransferred = amountTo - totalProtocolFeePortion;
+            TransferHelper.safeTransfer(tokenTo, receiver, amountTransferred);
+        }
 
         if (amountTransferred < zap.amountTokenToMin) revert InsufficientMinAmount();
 
@@ -551,11 +553,11 @@ contract Zap is Ownable, ReentrancyGuard {
         address router
     ) internal returns (uint256 amountTo) {
         uint256 len = path.length;
-        address tokenTo = path[len - 1];
-        uint256 balanceBefore = IERC20(tokenTo).balanceOf(address(this));
 
         // swap tokens following the path
         if (len > 1) {
+            address tokenTo = path[len - 1];
+            uint256 balanceBefore = IERC20(tokenTo).balanceOf(address(this));
             _approveTokenIfNeeded(path[0], amountFrom, router);
             IDXswapRouter(router).swapExactTokensForTokensSupportingFeeOnTransferTokens(
                 amountFrom,
