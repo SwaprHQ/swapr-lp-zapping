@@ -1,5 +1,6 @@
 .env
 .vscode
+.DS_Store
 node_modules/
 contracts/.flattened
 build/
@@ -8,3 +9,4 @@ typechain/
 coverage/
 coverage.json
 bundle/
+bin/
